@@ -104,19 +104,32 @@ func (b *BrewInstaller) List() (brewfile.Packages, error) {
 
 // Install installs a package
 func (b *BrewInstaller) Install(pkg brewfile.Package) error {
+	return b.InstallWithProgress(pkg, nil)
+}
+
+// InstallWithProgress installs a package and streams output to a callback
+func (b *BrewInstaller) InstallWithProgress(pkg brewfile.Package, onOutput func(line string)) error {
+	var args []string
+
 	switch pkg.Type {
 	case brewfile.TypeTap:
-		_, err := b.runner.Run("brew", "tap", pkg.Name)
-		return err
+		args = []string{"tap", pkg.Name}
 	case brewfile.TypeBrew:
-		_, err := b.runner.Run("brew", "install", pkg.Name)
-		return err
+		args = []string{"install", pkg.Name}
 	case brewfile.TypeCask:
-		_, err := b.runner.Run("brew", "install", "--cask", pkg.Name)
-		return err
+		args = []string{"install", "--cask", pkg.Name}
 	default:
 		return nil
 	}
+
+	// If no callback provided, use the regular Run method
+	if onOutput == nil {
+		_, err := b.runner.Run("brew", args...)
+		return err
+	}
+
+	// Use streaming method with callback
+	return b.runner.RunWithOutput("brew", args, onOutput)
 }
 
 // Uninstall removes a package

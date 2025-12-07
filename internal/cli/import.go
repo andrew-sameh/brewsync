@@ -269,10 +269,10 @@ func runImport(cmd *cobra.Command, args []string) error {
 		}
 		history.LogImport(currentMachine, strings.Join(sources, ","), pkgNames)
 	} else {
-		// Interactive progress UI
+		// Interactive progress UI with streaming support
 		title := "Installing packages"
-		progressModel := progress.New(title, toInstall, func(pkg brewfile.Package) error {
-			return mgr.Install(pkg)
+		progressModel := progress.NewWithOutput(title, toInstall, func(pkg brewfile.Package, onOutput func(line string)) error {
+			return mgr.InstallWithProgress(pkg, onOutput)
 		})
 
 		p := tea.NewProgram(progressModel, tea.WithAltScreen())

@@ -245,7 +245,7 @@ func runConfigInit(cmd *cobra.Command, args []string) error {
 		brewfilePath = filepath.Join(home, brewfilePath[2:])
 	}
 
-	// Create initial config
+	// Create initial config with all default settings
 	initialConfig := map[string]interface{}{
 		"machines": map[string]interface{}{
 			machineName: map[string]interface{}{
@@ -258,9 +258,27 @@ func runConfigInit(cmd *cobra.Command, args []string) error {
 		"default_source":      machineName,
 		"default_categories":  config.DefaultCategories,
 		"conflict_resolution": config.ConflictAsk,
+		"auto_dump": map[string]interface{}{
+			"enabled":        false,
+			"after_install":  false,
+			"commit":         false,
+			"push":           false,
+			"commit_message": config.DefaultCommitMessage,
+		},
+		"dump": map[string]interface{}{
+			"use_brew_bundle": true,
+		},
+		"machine_specific": map[string]interface{}{},
 		"output": map[string]interface{}{
-			"color":   true,
-			"verbose": false,
+			"color":             true,
+			"verbose":           false,
+			"show_descriptions": true,
+		},
+		"hooks": map[string]interface{}{
+			"pre_install":  "",
+			"post_install": "",
+			"pre_dump":     "",
+			"post_dump":    "",
 		},
 	}
 
@@ -277,6 +295,16 @@ func runConfigInit(cmd *cobra.Command, args []string) error {
 
 	if err := os.WriteFile(path, data, 0644); err != nil {
 		return fmt.Errorf("failed to write config: %w", err)
+	}
+
+	// Create ignore.yaml if it doesn't exist
+	ignorePath := config.IgnorePath()
+	if _, err := os.Stat(ignorePath); os.IsNotExist(err) {
+		if err := config.CreateDefaultIgnoreFile(); err != nil {
+			printWarning("Failed to create ignore file: %v", err)
+		} else {
+			printInfo("Created ignore file at %s", ignorePath)
+		}
 	}
 
 	fmt.Println()

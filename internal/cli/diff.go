@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 
 	"github.com/andrew-sameh/brewsync/internal/brewfile"
@@ -165,8 +166,46 @@ func packageNames(pkgs brewfile.Packages) map[string][]string {
 func outputDiffTable(diff *brewfile.DiffResult, source, current string) error {
 	cfg, _ := config.Get()
 
+	const tableWidth = 80
+
+	// Header
+	headerText := fmt.Sprintf("%s → %s", source, current)
+	headerBox := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(catOverlay0).
+		Padding(0, 2).
+		Width(tableWidth).
+		Align(lipgloss.Center).
+		Foreground(catLavender).
+		Bold(true)
+
+	fmt.Println()
+	fmt.Println(headerBox.Render(headerText))
+	fmt.Println()
+
 	if diff.IsEmpty() {
-		printInfo("No differences between %s and %s", source, current)
+		// No differences box
+		noDiffBox := lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(catGreen).
+			Padding(0, 2).
+			Width(tableWidth).
+			Align(lipgloss.Center).
+			Foreground(catGreen).
+			Bold(true)
+
+		successIcon := lipgloss.NewStyle().
+			Foreground(catGreen).
+			Bold(true).
+			Render("✓")
+
+		msg := lipgloss.NewStyle().
+			Foreground(catGreen).
+			Render("No differences found - machines are in sync!")
+
+		content := lipgloss.JoinHorizontal(lipgloss.Left, successIcon, " ", msg)
+		fmt.Println(noDiffBox.Render(content))
+		fmt.Println()
 		return nil
 	}
 
@@ -176,29 +215,197 @@ func outputDiffTable(diff *brewfile.DiffResult, source, current string) error {
 		ignoredIDs[id] = true
 	}
 
-	// Print additions
-	if len(diff.Additions) > 0 {
-		fmt.Printf("\nTo be installed (from %s): %d packages\n", source, len(diff.Additions))
-		printPackagesByTypeWithIgnore(diff.Additions, "+", ignoredIDs)
+	// Column width (split the table in half with some margin)
+	colWidth := (tableWidth - 6) / 2 // 6 = padding + divider
+
+	// Group packages by type
+	additionsByType := diff.Additions.ByType()
+	removalsByType := diff.Removals.ByType()
+
+	typeOrder := []brewfile.PackageType{
+		brewfile.TypeTap,
+		brewfile.TypeBrew,
+		brewfile.TypeCask,
+		brewfile.TypeVSCode,
+		brewfile.TypeCursor,
+		brewfile.TypeAntigravity,
+		brewfile.TypeGo,
+		brewfile.TypeMas,
 	}
 
-	// Print removals
-	if len(diff.Removals) > 0 {
-		fmt.Printf("\nTo be removed (not in %s): %d packages\n", source, len(diff.Removals))
-		printPackagesByTypeWithIgnore(diff.Removals, "-", ignoredIDs)
+	// Type icons/colors
+	typeInfo := map[brewfile.PackageType]struct {
+		icon  string
+		color lipgloss.Color
+	}{
+		brewfile.TypeTap:         {"🚰", catTeal},
+		brewfile.TypeBrew:        {"🍺", catYellow},
+		brewfile.TypeCask:        {"📦", catPeach},
+		brewfile.TypeVSCode:      {"💻", catBlue},
+		brewfile.TypeCursor:      {"✏️ ", catMauve},
+		brewfile.TypeAntigravity: {"🚀", catPink},
+		brewfile.TypeGo:          {"🔷", catSapphire},
+		brewfile.TypeMas:         {"🍎", catRed},
 	}
 
-	// Summary
-	fmt.Printf("\nSummary: %s\n", diff.Summary())
+	var allRows []string
+
+	// Build rows for each category
+	for _, pkgType := range typeOrder {
+		additions := additionsByType[pkgType]
+		removals := removalsByType[pkgType]
+
+		// Skip if no changes for this type
+		if len(additions) == 0 && len(removals) == 0 {
+			continue
+		}
+
+		info := typeInfo[pkgType]
+
+		// Category header (spans both columns)
+		categoryHeader := lipgloss.NewStyle().
+			Foreground(info.color).
+			Bold(true).
+			Render(fmt.Sprintf("%s %s", info.icon, pkgType))
+
+		allRows = append(allRows, categoryHeader)
+
+		// Separator
+		separator := lipgloss.NewStyle().
+			Foreground(catOverlay0).
+			Render(strings.Repeat("─", tableWidth-4))
+		allRows = append(allRows, separator)
+
+		// Build left column (additions) for this type
+		var leftLines []string
+		if len(additions) > 0 {
+			leftHeader := lipgloss.NewStyle().
+				Foreground(catGreen).
+				Bold(true).
+				Render(fmt.Sprintf("➕ To Install (%d)", len(additions)))
+			leftLines = append(leftLines, leftHeader)
+
+			for _, pkg := range additions {
+				prefix := lipgloss.NewStyle().
+					Foreground(catGreen).
+					Bold(true).
+					Render("+")
+
+				pkgName := lipgloss.NewStyle().
+					Foreground(catText).
+					Render(pkg.Name)
+
+				ignored := ignoredIDs != nil && ignoredIDs[pkg.ID()]
+				if ignored {
+					ignoredTag := lipgloss.NewStyle().
+						Foreground(catOverlay1).
+						Italic(true).
+						Render("(ignored)")
+					leftLines = append(leftLines, fmt.Sprintf("  %s %s %s", prefix, pkgName, ignoredTag))
+				} else {
+					leftLines = append(leftLines, fmt.Sprintf("  %s %s", prefix, pkgName))
+				}
+			}
+		}
+
+		// Build right column (removals) for this type
+		var rightLines []string
+		if len(removals) > 0 {
+			rightHeader := lipgloss.NewStyle().
+				Foreground(catRed).
+				Bold(true).
+				Render(fmt.Sprintf("➖ To Remove (%d)", len(removals)))
+			rightLines = append(rightLines, rightHeader)
+
+			for _, pkg := range removals {
+				prefix := lipgloss.NewStyle().
+					Foreground(catRed).
+					Bold(true).
+					Render("-")
+
+				pkgName := lipgloss.NewStyle().
+					Foreground(catText).
+					Render(pkg.Name)
+
+				ignored := ignoredIDs != nil && ignoredIDs[pkg.ID()]
+				if ignored {
+					ignoredTag := lipgloss.NewStyle().
+						Foreground(catOverlay1).
+						Italic(true).
+						Render("(ignored)")
+					rightLines = append(rightLines, fmt.Sprintf("  %s %s %s", prefix, pkgName, ignoredTag))
+				} else {
+					rightLines = append(rightLines, fmt.Sprintf("  %s %s", prefix, pkgName))
+				}
+			}
+		}
+
+		// Equalize line counts
+		maxLines := len(leftLines)
+		if len(rightLines) > maxLines {
+			maxLines = len(rightLines)
+		}
+
+		// Pad shorter column with empty lines
+		for len(leftLines) < maxLines {
+			leftLines = append(leftLines, "")
+		}
+		for len(rightLines) < maxLines {
+			rightLines = append(rightLines, "")
+		}
+
+		// Create side-by-side rows
+		for i := 0; i < maxLines; i++ {
+			leftCol := lipgloss.NewStyle().
+				Width(colWidth).
+				Render(leftLines[i])
+
+			rightCol := lipgloss.NewStyle().
+				Width(colWidth).
+				Render(rightLines[i])
+
+			divider := lipgloss.NewStyle().
+				Foreground(catOverlay0).
+				Render("│")
+
+			row := lipgloss.JoinHorizontal(lipgloss.Top, leftCol, divider, rightCol)
+			allRows = append(allRows, row)
+		}
+
+		// Add spacing between categories
+		allRows = append(allRows, "")
+	}
+
+	// Content box
+	contentBox := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(catOverlay0).
+		Padding(1, 2).
+		Width(tableWidth)
+
+	content := strings.Join(allRows, "\n")
+	fmt.Println(contentBox.Render(content))
+	fmt.Println()
+
+	// Summary box
+	summaryBox := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(catBlue).
+		Padding(0, 2).
+		Width(tableWidth).
+		Align(lipgloss.Center).
+		Foreground(catBlue)
+
+	summaryText := diff.Summary()
+	fmt.Println(summaryBox.Render(summaryText))
+	fmt.Println()
 
 	return nil
 }
 
-func printPackagesByType(pkgs brewfile.Packages, prefix string) {
-	printPackagesByTypeWithIgnore(pkgs, prefix, nil)
-}
+func formatPackagesByType(pkgs brewfile.Packages, prefix string, prefixColor lipgloss.Color, ignoredIDs map[string]bool) []string {
+	var lines []string
 
-func printPackagesByTypeWithIgnore(pkgs brewfile.Packages, prefix string, ignoredIDs map[string]bool) {
 	byType := pkgs.ByType()
 	typeOrder := []brewfile.PackageType{
 		brewfile.TypeTap,
@@ -206,8 +413,24 @@ func printPackagesByTypeWithIgnore(pkgs brewfile.Packages, prefix string, ignore
 		brewfile.TypeCask,
 		brewfile.TypeVSCode,
 		brewfile.TypeCursor,
+		brewfile.TypeAntigravity,
 		brewfile.TypeGo,
 		brewfile.TypeMas,
+	}
+
+	// Type icons/colors
+	typeInfo := map[brewfile.PackageType]struct {
+		icon  string
+		color lipgloss.Color
+	}{
+		brewfile.TypeTap:         {"🚰", catTeal},
+		brewfile.TypeBrew:        {"🍺", catYellow},
+		brewfile.TypeCask:        {"📦", catPeach},
+		brewfile.TypeVSCode:      {"💻", catBlue},
+		brewfile.TypeCursor:      {"✏️ ", catMauve},
+		brewfile.TypeAntigravity: {"🚀", catPink},
+		brewfile.TypeGo:          {"🔷", catSapphire},
+		brewfile.TypeMas:         {"🍎", catRed},
 	}
 
 	for _, t := range typeOrder {
@@ -216,16 +439,52 @@ func printPackagesByTypeWithIgnore(pkgs brewfile.Packages, prefix string, ignore
 			continue
 		}
 
-		fmt.Printf("  %s (%d):\n", t, len(typePkgs))
+		info := typeInfo[t]
+
+		// Type header
+		typeHeader := lipgloss.NewStyle().
+			Foreground(info.color).
+			Bold(true).
+			Render(fmt.Sprintf("%s %s (%d)", info.icon, t, len(typePkgs)))
+
+		lines = append(lines, typeHeader)
+
+		// Packages
 		for _, pkg := range typePkgs {
-			// Check if this package is ignored
+			prefixStyled := lipgloss.NewStyle().
+				Foreground(prefixColor).
+				Bold(true).
+				Render(prefix)
+
+			pkgName := lipgloss.NewStyle().
+				Foreground(catText).
+				Render(pkg.Name)
+
+			// Check if ignored
 			ignored := ignoredIDs != nil && ignoredIDs[pkg.ID()]
 
+			var line string
 			if ignored {
-				fmt.Printf("    %s %s (ignored)\n", prefix, pkg.Name)
+				ignoredTag := lipgloss.NewStyle().
+					Foreground(catOverlay1).
+					Italic(true).
+					Render("(ignored)")
+				line = fmt.Sprintf("  %s %s %s", prefixStyled, pkgName, ignoredTag)
 			} else {
-				fmt.Printf("    %s %s\n", prefix, pkg.Name)
+				line = fmt.Sprintf("  %s %s", prefixStyled, pkgName)
 			}
+
+			lines = append(lines, line)
 		}
+	}
+
+	return lines
+}
+
+func printPackagesByType(pkgs brewfile.Packages, prefix string) {
+	// Legacy function - kept for compatibility
+	lines := formatPackagesByType(pkgs, prefix, catText, nil)
+	for _, line := range lines {
+		fmt.Println(line)
 	}
 }

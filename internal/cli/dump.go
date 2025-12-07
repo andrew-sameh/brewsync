@@ -4,7 +4,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
+	"time"
 
+	"github.com/charmbracelet/bubbles/spinner"
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 
 	"github.com/andrew-sameh/brewsync/internal/brewfile"
@@ -40,6 +45,107 @@ func init() {
 	dumpCmd.Flags().StringVarP(&dumpMessage, "message", "m", "", "custom commit message")
 }
 
+// dumpModel is the Bubble Tea model for the dump progress UI
+type dumpModel struct {
+	spinner     spinner.Model
+	step        string
+	completed   []string
+	done        bool
+	err         error
+	packages    brewfile.Packages
+	packagesByType map[brewfile.PackageType]int
+}
+
+type dumpStepMsg struct {
+	step      string
+	packages  brewfile.Packages
+	countInfo string
+}
+
+type dumpCompleteMsg struct {
+	packages brewfile.Packages
+}
+
+type dumpErrorMsg struct {
+	err error
+}
+
+func newDumpModel() dumpModel {
+	s := spinner.New()
+	s.Spinner = spinner.Dot
+	s.Style = lipgloss.NewStyle().Foreground(catMauve)
+
+	return dumpModel{
+		spinner:        s,
+		completed:      []string{},
+		packagesByType: make(map[brewfile.PackageType]int),
+	}
+}
+
+func (m dumpModel) Init() tea.Cmd {
+	return m.spinner.Tick
+}
+
+func (m dumpModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		if msg.String() == "ctrl+c" || msg.String() == "q" {
+			return m, tea.Quit
+		}
+
+	case dumpStepMsg:
+		m.step = msg.step
+		if msg.packages != nil {
+			m.packages = append(m.packages, msg.packages...)
+		}
+		if msg.countInfo != "" {
+			m.completed = append(m.completed, msg.countInfo)
+		}
+		return m, nil
+
+	case dumpCompleteMsg:
+		m.done = true
+		m.packages = msg.packages
+		return m, tea.Quit
+
+	case dumpErrorMsg:
+		m.err = msg.err
+		m.done = true
+		return m, tea.Quit
+
+	case spinner.TickMsg:
+		var cmd tea.Cmd
+		m.spinner, cmd = m.spinner.Update(msg)
+		return m, cmd
+	}
+
+	return m, nil
+}
+
+func (m dumpModel) View() string {
+	if m.err != nil {
+		return styleError.Render(fmt.Sprintf("✗ Error: %v", m.err))
+	}
+
+	if m.done {
+		return "" // Summary will be printed separately
+	}
+
+	var s strings.Builder
+
+	// Show current step with spinner
+	if m.step != "" {
+		s.WriteString(fmt.Sprintf("%s %s\n", m.spinner.View(), m.step))
+	}
+
+	// Show completed steps
+	for _, info := range m.completed {
+		s.WriteString(styleSuccess.Render("✓ ") + info + "\n")
+	}
+
+	return s.String()
+}
+
 func runDump(cmd *cobra.Command, args []string) error {
 	// Load config
 	cfg, err := config.Load()
@@ -58,164 +164,30 @@ func runDump(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("no Brewfile path configured for machine %s", cfg.CurrentMachine)
 	}
 
-	printInfo("Dumping packages for machine: %s", cfg.CurrentMachine)
-	printVerbose("Brewfile path: %s", brewfilePath)
-
 	// Ensure directory exists
 	dir := filepath.Dir(brewfilePath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf("failed to create directory %s: %w", dir, err)
 	}
 
-	// Collect packages
-	var allPackages brewfile.Packages
-	brewInst := installer.NewBrewInstaller()
-
-	// Use brew bundle dump if configured (default), otherwise collect manually
-	if cfg.Dump.UseBrewBundle && brewInst.IsAvailable() {
-		printVerbose("Using 'brew bundle dump --describe' for Homebrew packages...")
-
-		// Create temp file for brew bundle dump
-		tmpFile := brewfilePath + ".brewbundle.tmp"
-		if err := brewInst.DumpToFile(tmpFile); err != nil {
-			printWarning("Failed to run 'brew bundle dump': %v", err)
-		} else {
-			// Parse the brew bundle output (includes taps, formulae, casks with descriptions)
-			brewPkgs, err := brewfile.Parse(tmpFile)
-			if err != nil {
-				printWarning("Failed to parse brew bundle output: %v", err)
-			} else {
-				allPackages = append(allPackages, brewPkgs...)
-				printVerbose("  Found %d Homebrew packages (with descriptions)", len(brewPkgs))
-			}
-			// Clean up temp file
-			os.Remove(tmpFile)
-		}
-	} else if brewInst.IsAvailable() {
-		// Manual collection (without descriptions for now, but could add them)
-		printVerbose("Collecting Homebrew packages manually...")
-
-		taps, err := brewInst.ListTaps()
-		if err != nil {
-			printWarning("Failed to list taps: %v", err)
-		} else {
-			allPackages = append(allPackages, taps...)
-			printVerbose("  Found %d taps", len(taps))
-		}
-
-		formulae, err := brewInst.ListFormulae()
-		if err != nil {
-			printWarning("Failed to list formulae: %v", err)
-		} else {
-			allPackages = append(allPackages, formulae...)
-			printVerbose("  Found %d formulae", len(formulae))
-		}
-
-		casks, err := brewInst.ListCasks()
-		if err != nil {
-			printWarning("Failed to list casks: %v", err)
-		} else {
-			allPackages = append(allPackages, casks...)
-			printVerbose("  Found %d casks", len(casks))
-		}
-	} else {
-		printWarning("Homebrew not available, skipping brew packages")
+	// If quiet mode, run without animation
+	if quiet {
+		return runDumpQuiet(cfg, machine, brewfilePath)
 	}
 
-	// VSCode extensions (only add if not already in brew bundle dump output)
-	vscodeInst := installer.NewVSCodeInstaller()
-	if vscodeInst.IsAvailable() {
-		printVerbose("Collecting VSCode extensions...")
-		extensions, err := vscodeInst.List()
-		if err != nil {
-			printWarning("Failed to list VSCode extensions: %v", err)
-		} else {
-			beforeCount := len(allPackages)
-			allPackages = allPackages.AddUnique(extensions...)
-			addedCount := len(allPackages) - beforeCount
-			printVerbose("  Found %d extensions (%d new, %d already in Brewfile)", len(extensions), addedCount, len(extensions)-addedCount)
-		}
-	} else {
-		printVerbose("VSCode CLI not available, skipping extensions")
+	// Run with animation
+	return runDumpAnimated(cfg, machine, brewfilePath)
+}
+
+func runDumpQuiet(cfg *config.Config, machine config.Machine, brewfilePath string) error {
+	allPackages, err := collectAllPackages(cfg, brewfilePath)
+	if err != nil {
+		return err
 	}
 
-	// Cursor extensions (only add if not already in brew bundle dump output)
-	cursorInst := installer.NewCursorInstaller()
-	if cursorInst.IsAvailable() {
-		printVerbose("Collecting Cursor extensions...")
-		extensions, err := cursorInst.List()
-		if err != nil {
-			printWarning("Failed to list Cursor extensions: %v", err)
-		} else {
-			beforeCount := len(allPackages)
-			allPackages = allPackages.AddUnique(extensions...)
-			addedCount := len(allPackages) - beforeCount
-			printVerbose("  Found %d extensions (%d new, %d already in Brewfile)", len(extensions), addedCount, len(extensions)-addedCount)
-		}
-	} else {
-		printVerbose("Cursor CLI not available, skipping extensions")
-	}
-
-	// Antigravity extensions (only add if not already in brew bundle dump output)
-	antigravityInst := installer.NewAntigravityInstaller()
-	if antigravityInst.IsAvailable() {
-		printVerbose("Collecting Antigravity extensions...")
-		extensions, err := antigravityInst.List()
-		if err != nil {
-			printWarning("Failed to list Antigravity extensions: %v", err)
-		} else {
-			beforeCount := len(allPackages)
-			allPackages = allPackages.AddUnique(extensions...)
-			addedCount := len(allPackages) - beforeCount
-			printVerbose("  Found %d extensions (%d new, %d already in Brewfile)", len(extensions), addedCount, len(extensions)-addedCount)
-		}
-	} else {
-		printVerbose("Antigravity CLI not available, skipping extensions")
-	}
-
-	// Go tools (only add if not already in brew bundle dump output)
-	goInst := installer.NewGoToolsInstaller()
-	if goInst.IsAvailable() {
-		printVerbose("Collecting Go tools...")
-		tools, err := goInst.List()
-		if err != nil {
-			printWarning("Failed to list Go tools: %v", err)
-		} else {
-			beforeCount := len(allPackages)
-			allPackages = allPackages.AddUnique(tools...)
-			addedCount := len(allPackages) - beforeCount
-			printVerbose("  Found %d tools (%d new, %d already in Brewfile)", len(tools), addedCount, len(tools)-addedCount)
-		}
-	} else {
-		printVerbose("Go not available, skipping tools")
-	}
-
-	// Mac App Store apps (only add if not already in brew bundle dump output)
-	masInst := installer.NewMasInstaller()
-	if masInst.IsAvailable() {
-		printVerbose("Collecting Mac App Store apps...")
-		apps, err := masInst.List()
-		if err != nil {
-			printWarning("Failed to list Mac App Store apps: %v", err)
-		} else {
-			beforeCount := len(allPackages)
-			allPackages = allPackages.AddUnique(apps...)
-			addedCount := len(allPackages) - beforeCount
-			printVerbose("  Found %d apps (%d new, %d already in Brewfile)", len(apps), addedCount, len(apps)-addedCount)
-		}
-	} else {
-		printVerbose("mas CLI not available, skipping App Store apps")
-	}
-
-	// Dry run - just show what would be written
+	// Dry run
 	if dryRun {
-		printInfo("\nDry run - would write %d packages to %s:", len(allPackages), brewfilePath)
-		byType := allPackages.ByType()
-		for _, t := range brewfile.AllTypes() {
-			if pkgs, ok := byType[t]; ok && len(pkgs) > 0 {
-				printInfo("  %s: %d", t, len(pkgs))
-			}
-		}
+		printInfo("Dry run - would write %d packages to %s", len(allPackages), brewfilePath)
 		return nil
 	}
 
@@ -225,14 +197,52 @@ func runDump(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to write Brewfile: %w", err)
 	}
 
-	// Print summary
-	byType := allPackages.ByType()
-	printInfo("\nWrote %d packages to %s:", len(allPackages), brewfilePath)
-	for _, t := range brewfile.AllTypes() {
-		if pkgs, ok := byType[t]; ok && len(pkgs) > 0 {
-			printInfo("  %s: %d", t, len(pkgs))
+	printInfo("Wrote %d packages to %s", len(allPackages), brewfilePath)
+	return nil
+}
+
+func runDumpAnimated(cfg *config.Config, machine config.Machine, brewfilePath string) error {
+	// Create Bubble Tea program
+	p := tea.NewProgram(newDumpModel())
+
+	// Run collection in background
+	go func() {
+		allPackages, err := collectAllPackagesAnimated(cfg, brewfilePath, p)
+		if err != nil {
+			p.Send(dumpErrorMsg{err: err})
+			return
 		}
+		p.Send(dumpCompleteMsg{packages: allPackages})
+	}()
+
+	// Run UI
+	m, err := p.Run()
+	if err != nil {
+		return fmt.Errorf("failed to run UI: %w", err)
 	}
+
+	// Check for errors
+	model := m.(dumpModel)
+	if model.err != nil {
+		return model.err
+	}
+
+	allPackages := model.packages
+
+	// Dry run
+	if dryRun {
+		printDumpSummary(cfg.CurrentMachine, brewfilePath, allPackages, true)
+		return nil
+	}
+
+	// Write Brewfile
+	writer := brewfile.NewWriter(allPackages)
+	if err := writer.Write(brewfilePath); err != nil {
+		return fmt.Errorf("failed to write Brewfile: %w", err)
+	}
+
+	// Print pretty summary
+	printDumpSummary(cfg.CurrentMachine, brewfilePath, allPackages, false)
 
 	// TODO: Handle --commit and --push flags
 	if dumpCommit || dumpPush {
@@ -240,4 +250,266 @@ func runDump(cmd *cobra.Command, args []string) error {
 	}
 
 	return nil
+}
+
+func collectAllPackages(cfg *config.Config, brewfilePath string) (brewfile.Packages, error) {
+	var allPackages brewfile.Packages
+	brewInst := installer.NewBrewInstaller()
+
+	// Use brew bundle dump if configured (default), otherwise collect manually
+	if cfg.Dump.UseBrewBundle && brewInst.IsAvailable() {
+		// Create temp file for brew bundle dump
+		tmpFile := brewfilePath + ".brewbundle.tmp"
+		if err := brewInst.DumpToFile(tmpFile); err == nil {
+			// Parse the brew bundle output (includes taps, formulae, casks with descriptions)
+			if brewPkgs, err := brewfile.Parse(tmpFile); err == nil {
+				allPackages = append(allPackages, brewPkgs...)
+			}
+			os.Remove(tmpFile)
+		}
+	} else if brewInst.IsAvailable() {
+		// Manual collection
+		if taps, err := brewInst.ListTaps(); err == nil {
+			allPackages = append(allPackages, taps...)
+		}
+		if formulae, err := brewInst.ListFormulae(); err == nil {
+			allPackages = append(allPackages, formulae...)
+		}
+		if casks, err := brewInst.ListCasks(); err == nil {
+			allPackages = append(allPackages, casks...)
+		}
+	}
+
+	// Collect extensions
+	if vscodeInst := installer.NewVSCodeInstaller(); vscodeInst.IsAvailable() {
+		if extensions, err := vscodeInst.List(); err == nil {
+			allPackages = allPackages.AddUnique(extensions...)
+		}
+	}
+
+	if cursorInst := installer.NewCursorInstaller(); cursorInst.IsAvailable() {
+		if extensions, err := cursorInst.List(); err == nil {
+			allPackages = allPackages.AddUnique(extensions...)
+		}
+	}
+
+	if antigravityInst := installer.NewAntigravityInstaller(); antigravityInst.IsAvailable() {
+		if extensions, err := antigravityInst.List(); err == nil {
+			allPackages = allPackages.AddUnique(extensions...)
+		}
+	}
+
+	if goInst := installer.NewGoToolsInstaller(); goInst.IsAvailable() {
+		if tools, err := goInst.List(); err == nil {
+			allPackages = allPackages.AddUnique(tools...)
+		}
+	}
+
+	if masInst := installer.NewMasInstaller(); masInst.IsAvailable() {
+		if apps, err := masInst.List(); err == nil {
+			allPackages = allPackages.AddUnique(apps...)
+		}
+	}
+
+	return allPackages, nil
+}
+
+func collectAllPackagesAnimated(cfg *config.Config, brewfilePath string, p *tea.Program) (brewfile.Packages, error) {
+	var allPackages brewfile.Packages
+	brewInst := installer.NewBrewInstaller()
+
+	// Homebrew packages
+	p.Send(dumpStepMsg{step: "Collecting Homebrew packages..."})
+	time.Sleep(100 * time.Millisecond) // Brief pause for UI update
+
+	if cfg.Dump.UseBrewBundle && brewInst.IsAvailable() {
+		tmpFile := brewfilePath + ".brewbundle.tmp"
+		if err := brewInst.DumpToFile(tmpFile); err == nil {
+			if brewPkgs, err := brewfile.Parse(tmpFile); err == nil {
+				allPackages = append(allPackages, brewPkgs...)
+				byType := brewPkgs.ByType()
+				taps := len(byType[brewfile.TypeTap])
+				formulae := len(byType[brewfile.TypeBrew])
+				casks := len(byType[brewfile.TypeCask])
+				info := fmt.Sprintf("Homebrew: %d packages (taps: %d, formulae: %d, casks: %d)",
+					len(brewPkgs), taps, formulae, casks)
+				p.Send(dumpStepMsg{countInfo: info})
+			}
+			os.Remove(tmpFile)
+		}
+	} else if brewInst.IsAvailable() {
+		var brewCount int
+		if taps, err := brewInst.ListTaps(); err == nil {
+			allPackages = append(allPackages, taps...)
+			brewCount += len(taps)
+		}
+		if formulae, err := brewInst.ListFormulae(); err == nil {
+			allPackages = append(allPackages, formulae...)
+			brewCount += len(formulae)
+		}
+		if casks, err := brewInst.ListCasks(); err == nil {
+			allPackages = append(allPackages, casks...)
+			brewCount += len(casks)
+		}
+		if brewCount > 0 {
+			p.Send(dumpStepMsg{countInfo: fmt.Sprintf("Homebrew: %d packages", brewCount)})
+		}
+	}
+
+	// VSCode extensions
+	if vscodeInst := installer.NewVSCodeInstaller(); vscodeInst.IsAvailable() {
+		p.Send(dumpStepMsg{step: "Collecting VSCode extensions..."})
+		time.Sleep(100 * time.Millisecond)
+		if extensions, err := vscodeInst.List(); err == nil {
+			beforeCount := len(allPackages)
+			allPackages = allPackages.AddUnique(extensions...)
+			addedCount := len(allPackages) - beforeCount
+			p.Send(dumpStepMsg{countInfo: fmt.Sprintf("VSCode: %d extensions (%d new)", len(extensions), addedCount)})
+		}
+	}
+
+	// Cursor extensions
+	if cursorInst := installer.NewCursorInstaller(); cursorInst.IsAvailable() {
+		p.Send(dumpStepMsg{step: "Collecting Cursor extensions..."})
+		time.Sleep(100 * time.Millisecond)
+		if extensions, err := cursorInst.List(); err == nil {
+			beforeCount := len(allPackages)
+			allPackages = allPackages.AddUnique(extensions...)
+			addedCount := len(allPackages) - beforeCount
+			p.Send(dumpStepMsg{countInfo: fmt.Sprintf("Cursor: %d extensions (%d new)", len(extensions), addedCount)})
+		}
+	}
+
+	// Antigravity extensions
+	if antigravityInst := installer.NewAntigravityInstaller(); antigravityInst.IsAvailable() {
+		p.Send(dumpStepMsg{step: "Collecting Antigravity extensions..."})
+		time.Sleep(100 * time.Millisecond)
+		if extensions, err := antigravityInst.List(); err == nil {
+			beforeCount := len(allPackages)
+			allPackages = allPackages.AddUnique(extensions...)
+			addedCount := len(allPackages) - beforeCount
+			p.Send(dumpStepMsg{countInfo: fmt.Sprintf("Antigravity: %d extensions (%d new)", len(extensions), addedCount)})
+		}
+	}
+
+	// Go tools
+	if goInst := installer.NewGoToolsInstaller(); goInst.IsAvailable() {
+		p.Send(dumpStepMsg{step: "Collecting Go tools..."})
+		time.Sleep(100 * time.Millisecond)
+		if tools, err := goInst.List(); err == nil {
+			beforeCount := len(allPackages)
+			allPackages = allPackages.AddUnique(tools...)
+			addedCount := len(allPackages) - beforeCount
+			p.Send(dumpStepMsg{countInfo: fmt.Sprintf("Go: %d tools (%d new)", len(tools), addedCount)})
+		}
+	}
+
+	// Mac App Store apps
+	if masInst := installer.NewMasInstaller(); masInst.IsAvailable() {
+		p.Send(dumpStepMsg{step: "Collecting Mac App Store apps..."})
+		time.Sleep(100 * time.Millisecond)
+		if apps, err := masInst.List(); err == nil {
+			beforeCount := len(allPackages)
+			allPackages = allPackages.AddUnique(apps...)
+			addedCount := len(allPackages) - beforeCount
+			p.Send(dumpStepMsg{countInfo: fmt.Sprintf("Mac App Store: %d apps (%d new)", len(apps), addedCount)})
+		}
+	}
+
+	return allPackages, nil
+}
+
+func printDumpSummary(machineName, brewfilePath string, packages brewfile.Packages, isDryRun bool) {
+	const tableWidth = 80
+
+	var allLines []string
+
+	// Header
+	headerIcon := "📊"
+	if isDryRun {
+		headerIcon = "🔍"
+	}
+	headerText := fmt.Sprintf("%s Dump %s - %s", headerIcon,
+		map[bool]string{true: "Preview", false: "Complete"}[isDryRun], machineName)
+	header := lipgloss.NewStyle().
+		Foreground(catLavender).
+		Bold(true).
+		Render(headerText)
+	allLines = append(allLines, header)
+
+	// Separator
+	separator := lipgloss.NewStyle().
+		Foreground(catOverlay0).
+		Render(strings.Repeat("─", tableWidth-4))
+	allLines = append(allLines, separator, "")
+
+	// Package counts by type
+	byType := packages.ByType()
+	typeOrder := []brewfile.PackageType{
+		brewfile.TypeTap,
+		brewfile.TypeBrew,
+		brewfile.TypeCask,
+		brewfile.TypeVSCode,
+		brewfile.TypeCursor,
+		brewfile.TypeAntigravity,
+		brewfile.TypeGo,
+		brewfile.TypeMas,
+	}
+
+	typeInfo := map[brewfile.PackageType]struct {
+		icon  string
+		color lipgloss.Color
+	}{
+		brewfile.TypeTap:         {"🚰", catTeal},
+		brewfile.TypeBrew:        {"🍺", catYellow},
+		brewfile.TypeCask:        {"📦", catPeach},
+		brewfile.TypeVSCode:      {"💻", catBlue},
+		brewfile.TypeCursor:      {"✏️ ", catMauve},
+		brewfile.TypeAntigravity: {"🚀", catPink},
+		brewfile.TypeGo:          {"🔷", catSapphire},
+		brewfile.TypeMas:         {"🍎", catRed},
+	}
+
+	for _, t := range typeOrder {
+		if pkgs, ok := byType[t]; ok && len(pkgs) > 0 {
+			info := typeInfo[t]
+			icon := lipgloss.NewStyle().Foreground(info.color).Render(info.icon)
+			label := lipgloss.NewStyle().Foreground(catText).Bold(true).Render(string(t))
+			count := lipgloss.NewStyle().Foreground(catGreen).Render(fmt.Sprintf("%d", len(pkgs)))
+			allLines = append(allLines, fmt.Sprintf("%s %s: %s", icon, label, count))
+		}
+	}
+
+	allLines = append(allLines, "")
+
+	// File path
+	fileIcon := lipgloss.NewStyle().Foreground(catMauve).Render("📄")
+	fileLabel := lipgloss.NewStyle().Foreground(catSubtext0).Render("Brewfile:")
+	filePath := lipgloss.NewStyle().Foreground(catText).Render(brewfilePath)
+	allLines = append(allLines, fmt.Sprintf("%s %s", fileIcon, fileLabel))
+	allLines = append(allLines, fmt.Sprintf("   %s", filePath))
+
+	allLines = append(allLines, "")
+
+	// Total
+	totalIcon := "✅"
+	if isDryRun {
+		totalIcon = "👁️ "
+	}
+	totalText := lipgloss.NewStyle().
+		Foreground(catGreen).
+		Bold(true).
+		Render(fmt.Sprintf("%s Total: %d packages", totalIcon, len(packages)))
+	allLines = append(allLines, totalText)
+
+	// Summary box
+	summaryBox := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(catGreen).
+		Padding(1, 2).
+		Width(tableWidth)
+
+	fmt.Println()
+	fmt.Println(summaryBox.Render(strings.Join(allLines, "\n")))
+	fmt.Println()
 }

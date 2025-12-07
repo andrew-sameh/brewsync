@@ -38,6 +38,11 @@ func NewManager() *Manager {
 
 // Install installs a package using the appropriate installer
 func (m *Manager) Install(pkg brewfile.Package) error {
+	return m.InstallWithProgress(pkg, nil)
+}
+
+// InstallWithProgress installs a package and streams output to a callback
+func (m *Manager) InstallWithProgress(pkg brewfile.Package, onOutput func(line string)) error {
 	installer, err := m.getInstaller(pkg.Type)
 	if err != nil {
 		return err
@@ -47,6 +52,12 @@ func (m *Manager) Install(pkg brewfile.Package) error {
 		return fmt.Errorf("%s installer not available", pkg.Type)
 	}
 
+	// Use specialized method for brew packages that support streaming
+	if pkg.Type == brewfile.TypeTap || pkg.Type == brewfile.TypeBrew || pkg.Type == brewfile.TypeCask {
+		return m.brew.InstallWithProgress(pkg, onOutput)
+	}
+
+	// Other installers don't support streaming yet, use regular install
 	return installer.Install(pkg)
 }
 
@@ -66,11 +77,30 @@ func (m *Manager) Uninstall(pkg brewfile.Package) error {
 
 // InstallMany installs multiple packages, returning errors for each failure
 func (m *Manager) InstallMany(packages brewfile.Packages, onProgress func(pkg brewfile.Package, i, total int, err error)) error {
+	return m.InstallManyWithOutput(packages, onProgress, nil)
+}
+
+// InstallManyWithOutput installs multiple packages with progress and output streaming
+func (m *Manager) InstallManyWithOutput(
+	packages brewfile.Packages,
+	onProgress func(pkg brewfile.Package, i, total int, err error),
+	onOutput func(pkg brewfile.Package, line string),
+) error {
 	var lastErr error
 	total := len(packages)
 
 	for i, pkg := range packages {
-		err := m.Install(pkg)
+		var err error
+
+		// If output callback is provided, use streaming install
+		if onOutput != nil {
+			err = m.InstallWithProgress(pkg, func(line string) {
+				onOutput(pkg, line)
+			})
+		} else {
+			err = m.Install(pkg)
+		}
+
 		if onProgress != nil {
 			onProgress(pkg, i+1, total, err)
 		}

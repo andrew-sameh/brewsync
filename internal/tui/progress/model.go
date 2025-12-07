@@ -22,12 +22,21 @@ type InstallResult struct {
 // InstallFunc is the function that installs a package
 type InstallFunc func(pkg brewfile.Package) error
 
+// InstallWithOutputFunc is the function that installs a package with output streaming
+type InstallWithOutputFunc func(pkg brewfile.Package, onOutput func(line string)) error
+
 // InstallMsg is sent when a package installation completes
 type InstallMsg struct {
 	Package brewfile.Package
 	Index   int
 	Total   int
 	Error   error
+}
+
+// OutputLineMsg is sent when a line of output is received from the installer
+type OutputLineMsg struct {
+	Package brewfile.Package
+	Line    string
 }
 
 // DoneMsg is sent when all installations are complete
@@ -39,18 +48,22 @@ type DoneMsg struct {
 
 // Model is the progress UI model
 type Model struct {
-	title     string
-	packages  brewfile.Packages
-	current   int
-	spinner   spinner.Model
-	progress  progress.Model
-	results   []InstallResult
-	installed int
-	failed    int
-	done      bool
-	width     int
-	height    int
-	installFn InstallFunc
+	title            string
+	packages         brewfile.Packages
+	current          int
+	spinner          spinner.Model
+	progress         progress.Model
+	results          []InstallResult
+	installed        int
+	failed           int
+	done             bool
+	width            int
+	height           int
+	installFn        InstallFunc
+	installOutputFn  InstallWithOutputFunc
+	outputLines      []string          // Recent output lines
+	maxOutputLines   int              // Max lines to keep
+	currentPkg       *brewfile.Package // Current package being installed
 }
 
 // New creates a new progress model
@@ -62,15 +75,40 @@ func New(title string, packages brewfile.Packages, installFn InstallFunc) Model 
 	p := progress.New(progress.WithDefaultGradient())
 
 	return Model{
-		title:     title,
-		packages:  packages,
-		current:   0,
-		spinner:   s,
-		progress:  p,
-		results:   make([]InstallResult, 0, len(packages)),
-		installFn: installFn,
-		width:     80,
-		height:    24,
+		title:          title,
+		packages:       packages,
+		current:        0,
+		spinner:        s,
+		progress:       p,
+		results:        make([]InstallResult, 0, len(packages)),
+		installFn:      installFn,
+		outputLines:    make([]string, 0),
+		maxOutputLines: 10,
+		width:          80,
+		height:         24,
+	}
+}
+
+// NewWithOutput creates a new progress model with output streaming support
+func NewWithOutput(title string, packages brewfile.Packages, installOutputFn InstallWithOutputFunc) Model {
+	s := spinner.New()
+	s.Spinner = spinner.Dot
+	s.Style = styles.SpinnerStyle
+
+	p := progress.New(progress.WithDefaultGradient())
+
+	return Model{
+		title:           title,
+		packages:        packages,
+		current:         0,
+		spinner:         s,
+		progress:        p,
+		results:         make([]InstallResult, 0, len(packages)),
+		installOutputFn: installOutputFn,
+		outputLines:     make([]string, 0),
+		maxOutputLines:  10,
+		width:           80,
+		height:          24,
 	}
 }
 
@@ -105,6 +143,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.spinner, cmd = m.spinner.Update(msg)
 		return m, cmd
 
+	case OutputLineMsg:
+		// Add line to output buffer
+		m.outputLines = append(m.outputLines, msg.Line)
+
+		// Keep only the last N lines
+		if len(m.outputLines) > m.maxOutputLines {
+			m.outputLines = m.outputLines[len(m.outputLines)-m.maxOutputLines:]
+		}
+		return m, nil
+
 	case InstallMsg:
 		result := InstallResult{
 			Package: msg.Package,
@@ -119,6 +167,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		m.current = msg.Index + 1
+		m.currentPkg = nil
+		m.outputLines = []string{} // Clear output for next package
 
 		if m.current >= len(m.packages) {
 			m.done = true
@@ -137,17 +187,44 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // installNext returns a command to install the next package
-func (m Model) installNext() tea.Cmd {
+func (m *Model) installNext() tea.Cmd {
 	if m.current >= len(m.packages) {
 		return nil
 	}
 
 	pkg := m.packages[m.current]
+	m.currentPkg = &pkg
 	idx := m.current
 	total := len(m.packages)
 
+	// Use streaming install if available
+	if m.installOutputFn != nil {
+		return m.streamingInstall(pkg, idx, total)
+	}
+
+	// Fallback to regular install
 	return func() tea.Msg {
 		err := m.installFn(pkg)
+		return InstallMsg{
+			Package: pkg,
+			Index:   idx,
+			Total:   total,
+			Error:   err,
+		}
+	}
+}
+
+// streamingInstall performs installation with output capture (for future use)
+func (m *Model) streamingInstall(pkg brewfile.Package, idx, total int) tea.Cmd {
+	return func() tea.Msg {
+		// Call the install function with output streaming
+		// Output lines are captured but not shown in real-time yet
+		// This keeps the door open for future enhancement
+		err := m.installOutputFn(pkg, func(line string) {
+			// Output callback - could be used for logging or future real-time display
+			// For now, we just let it flow through
+		})
+
 		return InstallMsg{
 			Package: pkg,
 			Index:   idx,

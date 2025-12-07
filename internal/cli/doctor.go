@@ -3,11 +3,14 @@ package cli
 import (
 	"fmt"
 	"os"
+	"strings"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 
 	"github.com/andrew-sameh/brewsync/internal/config"
 	"github.com/andrew-sameh/brewsync/internal/exec"
+	"github.com/andrew-sameh/brewsync/pkg/version"
 )
 
 var doctorCmd = &cobra.Command{
@@ -16,10 +19,12 @@ var doctorCmd = &cobra.Command{
 	Long: `Check your BrewSync configuration and environment for potential issues.
 
 Validates:
+  - BrewSync version
   - Config file exists and is valid
+  - Ignore file exists
   - Current machine is detected
   - Brewfile paths exist
-  - Required CLI tools are available (brew, code, cursor, mas, go)`,
+  - Required CLI tools are available (brew, code, cursor, antigravity, mas, go)`,
 	RunE: runDoctor,
 }
 
@@ -36,8 +41,14 @@ type checkResult struct {
 func runDoctor(cmd *cobra.Command, args []string) error {
 	var results []checkResult
 
+	// Check version
+	results = append(results, checkVersion())
+
 	// Check config file
 	results = append(results, checkConfigFile())
+
+	// Check ignore file
+	results = append(results, checkIgnoreFile())
 
 	// Load config for further checks
 	cfg, err := config.Get()
@@ -69,6 +80,14 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+func checkVersion() checkResult {
+	return checkResult{
+		name:    "BrewSync version",
+		ok:      true,
+		message: version.Full(),
+	}
+}
+
 func checkConfigFile() checkResult {
 	if config.Exists() {
 		path, _ := config.ConfigPath()
@@ -82,6 +101,28 @@ func checkConfigFile() checkResult {
 		name:    "Config file",
 		ok:      false,
 		message: "Not found. Run 'brewsync config init' to create one.",
+	}
+}
+
+func checkIgnoreFile() checkResult {
+	ignorePath := config.IgnorePath()
+	if _, err := os.Stat(ignorePath); os.IsNotExist(err) {
+		return checkResult{
+			name:    "Ignore file",
+			ok:      true, // It's optional
+			message: fmt.Sprintf("Not found (optional). Run 'brewsync ignore init' to create one."),
+		}
+	} else if err != nil {
+		return checkResult{
+			name:    "Ignore file",
+			ok:      false,
+			message: fmt.Sprintf("Error: %v", err),
+		}
+	}
+	return checkResult{
+		name:    "Ignore file",
+		ok:      true,
+		message: fmt.Sprintf("Found at %s", ignorePath),
 	}
 }
 
@@ -177,6 +218,7 @@ func checkCLITools() []checkResult {
 		{"brew bundle", "brew", true}, // Will check bundle separately
 		{"VSCode CLI", "code", false},
 		{"Cursor CLI", "cursor", false},
+		{"Antigravity CLI", "agy", false},
 		{"Mac App Store CLI", "mas", false},
 		{"Go", "go", false},
 	}
@@ -224,30 +266,159 @@ func checkCLITools() []checkResult {
 }
 
 func printResults(results []checkResult) {
-	for _, r := range results {
-		var status string
-		if r.ok {
-			status = "✓"
-		} else {
-			status = "✗"
-		}
-		fmt.Printf("%s %s: %s\n", status, r.name, r.message)
+	const tableWidth = 80
+
+	// Header box
+	headerBox := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(catOverlay0).
+		Padding(0, 2).
+		Width(tableWidth).
+		Align(lipgloss.Center).
+		Foreground(catLavender).
+		Bold(true)
+
+	fmt.Println()
+	fmt.Println(headerBox.Render("BrewSync Environment Diagnostics"))
+	fmt.Println()
+
+	// Group results by category
+	categories := []struct {
+		title string
+		start int
+		end   int
+	}{
+		{"Version & Configuration", 0, 3},
+		{"Machine Setup", 3, 7},
+		{"CLI Tools", 7, len(results)},
 	}
+
+	// Build content for each category
+	var allRows []string
+
+	for _, cat := range categories {
+		if cat.start >= len(results) {
+			continue
+		}
+
+		// Category header
+		categoryHeader := lipgloss.NewStyle().
+			Foreground(catMauve).
+			Bold(true).
+			Padding(0, 1).
+			Render("◆ " + cat.title)
+
+		allRows = append(allRows, categoryHeader)
+
+		// Separator
+		separator := lipgloss.NewStyle().
+			Foreground(catOverlay0).
+			Render(strings.Repeat("─", tableWidth-4))
+		allRows = append(allRows, separator)
+
+		// Print results in this category
+		end := cat.end
+		if end > len(results) {
+			end = len(results)
+		}
+
+		for i := cat.start; i < end; i++ {
+			r := results[i]
+
+			// Status icon with color
+			var statusIcon string
+			var statusColor lipgloss.Color
+			if r.ok {
+				statusIcon = "✓"
+				statusColor = catGreen
+			} else {
+				statusIcon = "✗"
+				statusColor = catRed
+			}
+
+			status := lipgloss.NewStyle().
+				Foreground(statusColor).
+				Bold(true).
+				Width(3).
+				Render(statusIcon)
+
+			// Check name
+			name := lipgloss.NewStyle().
+				Foreground(catText).
+				Bold(true).
+				Width(28).
+				Render(r.name)
+
+			// Message
+			message := lipgloss.NewStyle().
+				Foreground(catSubtext0).
+				Width(tableWidth - 35).
+				Render(r.message)
+
+			row := lipgloss.JoinHorizontal(lipgloss.Left, status, " ", name, " ", message)
+			allRows = append(allRows, row)
+		}
+
+		// Add spacing between categories
+		allRows = append(allRows, "")
+	}
+
+	// Main content box
+	contentBox := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(catOverlay0).
+		Padding(1, 2).
+		Width(tableWidth)
+
+	content := strings.Join(allRows, "\n")
+	fmt.Println(contentBox.Render(content))
+	fmt.Println()
 
 	// Summary
 	var failures int
-	var warnings int
 	for _, r := range results {
 		if !r.ok {
 			failures++
 		}
 	}
 
-	fmt.Println()
+	// Summary box
+	summaryBox := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(catOverlay0).
+		Padding(0, 2).
+		Width(tableWidth).
+		Align(lipgloss.Center)
+
+	var summaryContent string
 	if failures == 0 {
-		fmt.Println("All checks passed!")
+		successIcon := lipgloss.NewStyle().
+			Foreground(catGreen).
+			Bold(true).
+			Render("✓")
+
+		successMsg := lipgloss.NewStyle().
+			Foreground(catGreen).
+			Bold(true).
+			Render("All checks passed! Your setup is ready to go!")
+
+		summaryContent = lipgloss.JoinHorizontal(lipgloss.Left, successIcon, " ", successMsg)
+		summaryBox = summaryBox.BorderForeground(catGreen)
 	} else {
-		fmt.Printf("%d issue(s) found.\n", failures)
+		errorIcon := lipgloss.NewStyle().
+			Foreground(catRed).
+			Bold(true).
+			Render("✗")
+
+		errorMsg := lipgloss.NewStyle().
+			Foreground(catRed).
+			Bold(true).
+			Render(fmt.Sprintf("Found %d issue(s) that need attention", failures))
+
+		summaryContent = lipgloss.JoinHorizontal(lipgloss.Left, errorIcon, " ", errorMsg)
+		summaryBox = summaryBox.BorderForeground(catRed)
 	}
-	_ = warnings
+
+	fmt.Println(summaryBox.Render(summaryContent))
+	fmt.Println()
 }

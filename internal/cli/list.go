@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 
 	"github.com/andrew-sameh/brewsync/internal/brewfile"
@@ -114,8 +116,31 @@ func outputListTable(packages brewfile.Packages, machine string) error {
 		return nil
 	}
 
-	fmt.Printf("Packages for %s: %d total\n\n", machine, len(packages))
+	const tableWidth = 80
 
+	// Header box
+	headerText := fmt.Sprintf("Packages for %s", machine)
+	headerBox := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(catOverlay0).
+		Padding(0, 2).
+		Width(tableWidth).
+		Align(lipgloss.Center).
+		Foreground(catLavender).
+		Bold(true)
+
+	// Total count
+	totalText := lipgloss.NewStyle().
+		Foreground(catSubtext0).
+		Render(fmt.Sprintf("Total: %d packages", len(packages)))
+
+	header := lipgloss.JoinVertical(lipgloss.Center, headerText, totalText)
+
+	fmt.Println()
+	fmt.Println(headerBox.Render(header))
+	fmt.Println()
+
+	// Package groups
 	byType := packages.ByType()
 	typeOrder := []brewfile.PackageType{
 		brewfile.TypeTap,
@@ -123,9 +148,27 @@ func outputListTable(packages brewfile.Packages, machine string) error {
 		brewfile.TypeCask,
 		brewfile.TypeVSCode,
 		brewfile.TypeCursor,
+		brewfile.TypeAntigravity,
 		brewfile.TypeGo,
 		brewfile.TypeMas,
 	}
+
+	// Type icons/colors
+	typeInfo := map[brewfile.PackageType]struct {
+		icon  string
+		color lipgloss.Color
+	}{
+		brewfile.TypeTap:         {"🚰", catTeal},
+		brewfile.TypeBrew:        {"🍺", catYellow},
+		brewfile.TypeCask:        {"📦", catPeach},
+		brewfile.TypeVSCode:      {"💻", catBlue},
+		brewfile.TypeCursor:      {"✏️ ", catMauve},
+		brewfile.TypeAntigravity: {"🚀", catPink},
+		brewfile.TypeGo:          {"🔷", catSapphire},
+		brewfile.TypeMas:         {"🍎", catRed},
+	}
+
+	var allRows []string
 
 	for _, t := range typeOrder {
 		typePkgs := byType[t]
@@ -133,12 +176,61 @@ func outputListTable(packages brewfile.Packages, machine string) error {
 			continue
 		}
 
-		fmt.Printf("%s (%d):\n", t, len(typePkgs))
+		info := typeInfo[t]
+
+		// Category header with icon
+		categoryHeader := lipgloss.NewStyle().
+			Foreground(info.color).
+			Bold(true).
+			Render(fmt.Sprintf("%s %s (%d)", info.icon, t, len(typePkgs)))
+
+		allRows = append(allRows, categoryHeader)
+
+		// Separator
+		separator := lipgloss.NewStyle().
+			Foreground(catOverlay0).
+			Render(strings.Repeat("─", tableWidth-4))
+		allRows = append(allRows, separator)
+
+		// Package list
 		for _, pkg := range typePkgs {
-			fmt.Printf("  %s\n", pkg.Name)
+			bullet := lipgloss.NewStyle().
+				Foreground(catOverlay1).
+				Render("•")
+
+			pkgName := lipgloss.NewStyle().
+				Foreground(catText).
+				Render(pkg.Name)
+
+			// Add description if available
+			var row string
+			if pkg.Description != "" {
+				desc := lipgloss.NewStyle().
+					Foreground(catSubtext0).
+					Italic(true).
+					Render(pkg.Description)
+				row = fmt.Sprintf("  %s %s — %s", bullet, pkgName, desc)
+			} else {
+				row = fmt.Sprintf("  %s %s", bullet, pkgName)
+			}
+
+			allRows = append(allRows, row)
 		}
-		fmt.Println()
+
+		// Add spacing between categories
+		allRows = append(allRows, "")
 	}
+
+	// Main content box
+	contentBox := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(catOverlay0).
+		Padding(1, 2).
+		Width(tableWidth)
+
+	content := strings.Join(allRows, "\n")
+	fmt.Println(contentBox.Render(content))
+	fmt.Println()
 
 	return nil
 }

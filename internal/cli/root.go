@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 
 	"github.com/andrew-sameh/brewsync/internal/config"
@@ -18,6 +19,48 @@ var (
 	quiet     bool
 	noColor   bool
 	assumeYes bool
+)
+
+// Catppuccin Mocha color palette
+var (
+	catRosewater = lipgloss.Color("#f5e0dc")
+	catFlamingo  = lipgloss.Color("#f2cdcd")
+	catPink      = lipgloss.Color("#f5c2e7")
+	catMauve     = lipgloss.Color("#cba6f7")
+	catRed       = lipgloss.Color("#f38ba8")
+	catMaroon    = lipgloss.Color("#eba0ac")
+	catPeach     = lipgloss.Color("#fab387")
+	catYellow    = lipgloss.Color("#f9e2af")
+	catGreen     = lipgloss.Color("#a6e3a1")
+	catTeal      = lipgloss.Color("#94e2d5")
+	catSky       = lipgloss.Color("#89dceb")
+	catSapphire  = lipgloss.Color("#74c7ec")
+	catBlue      = lipgloss.Color("#89b4fa")
+	catLavender  = lipgloss.Color("#b4befe")
+	catText      = lipgloss.Color("#cdd6f4")
+	catSubtext1  = lipgloss.Color("#bac2de")
+	catSubtext0  = lipgloss.Color("#a6adc8")
+	catOverlay2  = lipgloss.Color("#9399b2")
+	catOverlay1  = lipgloss.Color("#7f849c")
+	catOverlay0  = lipgloss.Color("#6c7086")
+	catSurface2  = lipgloss.Color("#585b70")
+	catSurface1  = lipgloss.Color("#45475a")
+	catSurface0  = lipgloss.Color("#313244")
+	catBase      = lipgloss.Color("#1e1e2e")
+	catMantle    = lipgloss.Color("#181825")
+	catCrust     = lipgloss.Color("#11111b")
+)
+
+// Lipgloss styles using Catppuccin Mocha palette
+var (
+	styleSuccess = lipgloss.NewStyle().Foreground(catGreen).Bold(true)     // Green
+	styleError   = lipgloss.NewStyle().Foreground(catRed).Bold(true)       // Red
+	styleWarning = lipgloss.NewStyle().Foreground(catPeach).Bold(true)     // Peach
+	styleBold    = lipgloss.NewStyle().Foreground(catLavender).Bold(true)  // Lavender
+	styleDim     = lipgloss.NewStyle().Foreground(catOverlay0)             // Overlay 0
+	styleInfo    = lipgloss.NewStyle().Foreground(catSapphire)             // Sapphire
+	styleMauve   = lipgloss.NewStyle().Foreground(catMauve).Bold(true)     // Mauve
+	styleText    = lipgloss.NewStyle().Foreground(catText)                 // Text
 )
 
 // rootCmd is the base command
@@ -92,5 +135,14 @@ func printError(format string, args ...interface{}) {
 func printWarning(format string, args ...interface{}) {
 	if !quiet {
 		fmt.Fprintf(os.Stderr, "Warning: "+format+"\n", args...)
+	}
+}
+
+// printStyled prints a styled string (respects noColor flag)
+func printStyled(text string, style lipgloss.Style) {
+	if noColor {
+		fmt.Print(text)
+	} else {
+		fmt.Print(style.Render(text))
 	}
 }

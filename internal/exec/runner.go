@@ -1,9 +1,11 @@
 package exec
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"os/exec"
 	"strings"
 	"time"
@@ -96,4 +98,57 @@ func RunLines(name string, args ...string) ([]string, error) {
 // Exists checks if a command exists using the default runner
 func Exists(name string) bool {
 	return Default.Exists(name)
+}
+
+// RunWithOutput executes a command and streams output to a callback
+func (r *Runner) RunWithOutput(name string, args []string, onOutput func(line string)) error {
+	ctx, cancel := context.WithTimeout(context.Background(), r.Timeout)
+	defer cancel()
+
+	return r.RunWithOutputContext(ctx, name, args, onOutput)
+}
+
+// RunWithOutputContext executes a command with context and streams output
+func (r *Runner) RunWithOutputContext(ctx context.Context, name string, args []string, onOutput func(line string)) error {
+	cmd := exec.CommandContext(ctx, name, args...)
+
+	// Create pipes for stdout and stderr
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return err
+	}
+
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return err
+	}
+
+	// Start command
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+
+	// Stream both stdout and stderr to the callback
+	done := make(chan error, 2)
+	go streamLines(stdout, onOutput, done)
+	go streamLines(stderr, onOutput, done)
+
+	// Wait for streaming to complete
+	<-done
+	<-done
+
+	// Wait for command to finish
+	return cmd.Wait()
+}
+
+// streamLines reads lines from a reader and sends them to the callback
+func streamLines(r io.Reader, onOutput func(line string), done chan error) {
+	scanner := bufio.NewScanner(r)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if onOutput != nil {
+			onOutput(line)
+		}
+	}
+	done <- scanner.Err()
 }
