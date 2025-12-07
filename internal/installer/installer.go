@@ -16,21 +16,23 @@ type Installer interface {
 
 // Manager orchestrates installations across different package types
 type Manager struct {
-	brew   *BrewInstaller
-	vscode *VSCodeInstaller
-	cursor *CursorInstaller
-	mas    *MasInstaller
-	go_    *GoToolsInstaller
+	brew        *BrewInstaller
+	vscode      *VSCodeInstaller
+	cursor      *CursorInstaller
+	antigravity *AntigravityInstaller
+	mas         *MasInstaller
+	go_         *GoToolsInstaller
 }
 
 // NewManager creates a new installation manager
 func NewManager() *Manager {
 	return &Manager{
-		brew:   NewBrewInstaller(),
-		vscode: NewVSCodeInstaller(),
-		cursor: NewCursorInstaller(),
-		mas:    NewMasInstaller(),
-		go_:    NewGoToolsInstaller(),
+		brew:        NewBrewInstaller(),
+		vscode:      NewVSCodeInstaller(),
+		cursor:      NewCursorInstaller(),
+		antigravity: NewAntigravityInstaller(),
+		mas:         NewMasInstaller(),
+		go_:         NewGoToolsInstaller(),
 	}
 }
 
@@ -168,6 +170,8 @@ func (m *Manager) getInstaller(pkgType brewfile.PackageType) (Installer, error) 
 		return m.vscode, nil
 	case brewfile.TypeCursor:
 		return m.cursor, nil
+	case brewfile.TypeAntigravity:
+		return m.antigravity, nil
 	case brewfile.TypeMas:
 		return m.mas, nil
 	case brewfile.TypeGo:
@@ -180,10 +184,11 @@ func (m *Manager) getInstaller(pkgType brewfile.PackageType) (Installer, error) 
 // AvailableInstallers returns a map of installer types to availability
 func (m *Manager) AvailableInstallers() map[string]bool {
 	return map[string]bool{
-		"brew":   m.brew.IsAvailable(),
-		"vscode": m.vscode.IsAvailable(),
-		"cursor": m.cursor.IsAvailable(),
-		"mas":    m.mas.IsAvailable(),
-		"go":     m.go_.IsAvailable(),
+		"brew":        m.brew.IsAvailable(),
+		"vscode":      m.vscode.IsAvailable(),
+		"cursor":      m.cursor.IsAvailable(),
+		"antigravity": m.antigravity.IsAvailable(),
+		"mas":         m.mas.IsAvailable(),
+		"go":          m.go_.IsAvailable(),
 	}
 }

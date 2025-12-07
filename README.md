@@ -19,8 +19,10 @@ BrewSync solves the problem of keeping multiple macOS machines in sync. When you
   - Homebrew taps, formulae, and casks
   - VSCode extensions
   - Cursor extensions
+  - Antigravity extensions
   - Go tools
   - Mac App Store apps
+- Package descriptions captured automatically from Homebrew
 - Profile system for curated package groups
 - Ignore lists (global and per-machine)
 - Diff view between machines
@@ -30,12 +32,16 @@ BrewSync solves the problem of keeping multiple macOS machines in sync. When you
 ## Installation
 
 ```bash
-# Build from source
-go build -o brewsync ./cmd/brewsync
+# Using Make (recommended)
+make build        # Build to ./bin/brewsync
+make install      # Install to $GOPATH/bin
 
-# Install to GOPATH/bin
+# Or build directly with Go
+go build -o brewsync ./cmd/brewsync
 go install ./cmd/brewsync
 ```
+
+> 💡 **Tip**: Run `make help` to see all available commands. See [MAKEFILE_GUIDE.md](MAKEFILE_GUIDE.md) for details.
 
 ## Quick Start
 
@@ -53,7 +59,7 @@ This creates `~/.config/brewsync/config.yaml` with your machine settings based o
 brewsync dump
 ```
 
-Creates/updates your machine's Brewfile with all installed packages.
+Creates/updates your machine's Brewfile with all installed packages. By default, package descriptions are automatically captured from Homebrew, making your Brewfile self-documenting.
 
 ### 3. Check Status
 
@@ -174,11 +180,21 @@ brewsync profile install core,dev-go,k8s
 ### dump
 
 ```bash
-brewsync dump                    # Update Brewfile
+brewsync dump                    # Update Brewfile with descriptions
 brewsync dump --commit           # Commit changes to git
 brewsync dump --push             # Commit and push
 brewsync dump --dry-run          # Preview changes
 ```
+
+**Description Support**: By default, `brewsync dump` uses `brew bundle dump --describe` to capture package descriptions from Homebrew's database. Descriptions appear as comments above each package in your Brewfile, making it self-documenting.
+
+To disable automatic descriptions (manual collection), edit your config:
+```yaml
+dump:
+  use_brew_bundle: false
+```
+
+See [DUMP_DESCRIPTIONS.md](DUMP_DESCRIPTIONS.md) for more details.
 
 ### import
 
@@ -234,15 +250,42 @@ brewsync diff --only brew,cask   # Filter to specific types
 brewsync diff --format json      # Output as JSON
 ```
 
+**Note**: Packages marked with `(ignored)` are in your ignore list and won't be installed during import or sync operations.
+
 ### ignore
 
+The ignore system has two layers stored in a separate `ignore.yaml` file:
+
+**Category-level ignores** (ignore entire package types):
 ```bash
-brewsync ignore add cask:bluestacks              # Ignore on current machine
-brewsync ignore add brew:postgresql --global     # Ignore globally
-brewsync ignore add cask:steam --machine mini    # Ignore on specific machine
-brewsync ignore list                             # Show all ignored
-brewsync ignore remove cask:bluestacks           # Remove from ignore
+brewsync ignore category add mas                    # Ignore ALL Mac App Store apps
+brewsync ignore category add go --machine mini      # Ignore ALL Go tools on mini
+brewsync ignore category remove mas                 # Remove category ignore
+brewsync ignore category list                       # List ignored categories
 ```
+
+**Package-level ignores** (ignore specific packages):
+```bash
+brewsync ignore add cask:bluestacks                 # Ignore specific package
+brewsync ignore add brew:postgresql --global        # Ignore globally
+brewsync ignore add cask:steam --machine mini       # Ignore on specific machine
+brewsync ignore remove cask:bluestacks              # Remove from ignore
+brewsync ignore list                                # Show all ignores (categories + packages)
+```
+
+**Utility commands**:
+```bash
+brewsync ignore path                                # Show ignore file location
+brewsync ignore init                                # Create default ignore.yaml
+```
+
+**Two-Layer System**:
+- **Categories**: Ignore entire package types (e.g., all `mas`, all `go`)
+- **Packages**: Ignore specific packages within non-ignored categories
+
+**Scope**: Global (all machines) or per-machine
+
+**Note**: Ignore lists apply to `import`, `sync`, and `diff` commands but **not** to `dump`. The dump command captures everything installed (source of truth).
 
 ### profile
 
@@ -258,9 +301,13 @@ brewsync profile delete old-profile             # Delete profile
 
 ## Configuration
 
-Configuration is stored at `~/.config/brewsync/config.yaml`.
+Configuration is split into two files:
+- **`config.yaml`** - Main settings (machines, defaults, output)
+- **`ignore.yaml`** - Ignore rules (separate file for better organization)
 
-### Example Configuration
+Both are stored in `~/.config/brewsync/`.
+
+### Example config.yaml
 
 ```yaml
 machines:
@@ -282,20 +329,49 @@ default_categories:
   - cask
   - vscode
   - cursor
+  - antigravity
   - go
   - mas
 
-ignore:
-  global:
-    cask:
-      - "company-vpn"  # Manually installed
-  mini:
-    cask:
-      - "bluestacks"   # Don't need on workstation
+dump:
+  use_brew_bundle: true  # Use 'brew bundle dump --describe' for descriptions
 
 output:
   color: true
   verbose: false
+```
+
+### Example ignore.yaml
+
+```yaml
+# Global ignores (apply to all machines)
+global:
+  categories:
+    - mas           # Ignore ALL Mac App Store apps
+    - go            # Ignore ALL Go tools
+
+  packages:
+    cask:
+      - "company-vpn"     # Specific cask to ignore
+    brew:
+      - "postgresql"      # Specific brew formula to ignore
+
+# Machine-specific ignores
+machines:
+  mini:
+    categories:
+      - antigravity       # Don't use Antigravity on mini
+
+    packages:
+      cask:
+        - "bluestacks"    # Don't need on workstation
+
+  air:
+    categories: []
+
+    packages:
+      brew:
+        - "scrcpy"        # Laptop-specific exclusion
 ```
 
 ## Profiles
@@ -333,6 +409,7 @@ packages:
 ```
 ~/.config/brewsync/
 ├── config.yaml           # Main configuration
+├── ignore.yaml           # Ignore rules (categories + packages)
 ├── history.log           # Operation history
 └── profiles/             # Profile definitions
     ├── core.yaml
@@ -356,6 +433,7 @@ packages:
 | `cask` | Homebrew casks | `raycast`, `slack` |
 | `vscode` | VSCode extensions | `golang.go` |
 | `cursor` | Cursor extensions | `ms-python.python` |
+| `antigravity` | Antigravity extensions | `python.lsp` |
 | `go` | Go tools | `golang.org/x/tools/gopls` |
 | `mas` | Mac App Store | `497799835` (Xcode) |
 
@@ -366,16 +444,21 @@ BrewSync uses the standard Brewfile format with extensions:
 ```ruby
 # Standard Homebrew entries
 tap "homebrew/bundle"
+# Distributed revision control system
 brew "git"
 brew "libpq", link: true
+# Launcher and productivity tool
 cask "raycast"
 mas "Xcode", id: 497799835
 vscode "golang.go"
 
 # BrewSync extensions
 cursor "golang.go"
+antigravity "python.lsp"
 go "golang.org/x/tools/gopls"
 ```
+
+**Package Descriptions**: Comments above packages (e.g., `# Distributed revision control system`) are automatically captured by `brew bundle dump --describe`. This makes your Brewfile self-documenting and helps when reviewing packages across machines.
 
 ## Troubleshooting
 
@@ -405,23 +488,39 @@ This checks:
 - macOS
 - Go 1.21+ (for building from source)
 - Homebrew
-- Optional: VSCode (`code` CLI), Cursor (`cursor` CLI), mas-cli, Go
+- Optional: VSCode (`code` CLI), Cursor (`cursor` CLI), Antigravity (`agy` CLI), mas-cli, Go
 
 ## Development
 
 ```bash
+# Quick development cycle
+make quick              # Build + test (fastest)
+make dev                # Build + show version
+
+# Testing
+make test               # Run all tests
+make test-coverage      # With coverage
+make test-verbose       # Verbose output
+
+# Code quality
+make pre-commit         # Format + vet + test (run before committing)
+make ci                 # CI checks
+
 # Build
-go build -o brewsync ./cmd/brewsync
+make build              # Build to ./bin/brewsync
+make install            # Install to $GOPATH/bin
+make release            # Optimized production build
 
-# Run tests
-go test ./...
+# Manual testing
+make test-setup         # Setup test environment
+# ... follow MANUAL_TEST_GUIDE.md
+make test-cleanup       # Cleanup test environment
 
-# Run with coverage
-go test ./... -cover
-
-# Install locally
-go install ./cmd/brewsync
+# More commands
+make help               # See all available commands
 ```
+
+See [MAKEFILE_GUIDE.md](MAKEFILE_GUIDE.md) for complete documentation.
 
 ## License
 

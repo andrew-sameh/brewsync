@@ -9,8 +9,8 @@ import (
 )
 
 const (
-	// ConfigDir is the directory name under ~/.config
-	ConfigDir = "brewsync"
+	// ConfigDirName is the directory name under ~/.config
+	ConfigDirName = "brewsync"
 	// ConfigFileName is the config file name without extension
 	ConfigFileName = "config"
 	// ConfigFileType is the config file extension
@@ -30,7 +30,17 @@ func configDir() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to get home directory: %w", err)
 	}
-	return filepath.Join(home, ".config", ConfigDir), nil
+	return filepath.Join(home, ".config", ConfigDirName), nil
+}
+
+// ConfigDir returns the config directory path (exported version)
+func ConfigDir() string {
+	dir, err := configDir()
+	if err != nil {
+		// Fallback to a default (should rarely happen)
+		return filepath.Join(os.Getenv("HOME"), ".config", "brewsync")
+	}
+	return dir
 }
 
 // ConfigPath returns the full path to the config file
@@ -115,6 +125,13 @@ func Load() (*Config, error) {
 			cfg.CurrentMachine = detected
 		}
 	}
+
+	// Load ignore file
+	ignoreFile, err := LoadIgnoreFile()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load ignore file: %w", err)
+	}
+	cfg.ignoreFile = ignoreFile
 
 	return cfg, nil
 }

@@ -228,7 +228,8 @@ func runImport(cmd *cobra.Command, args []string) error {
 		if len(newlyIgnored) > 0 {
 			printInfo("Adding %d packages to ignore list", len(newlyIgnored))
 			for _, pkg := range newlyIgnored {
-				if err := updateIgnoreList(string(pkg.Type), pkg.Name, currentMachine, true); err != nil {
+				pkgID := string(pkg.Type) + ":" + pkg.Name
+				if err := config.AddPackageIgnore(currentMachine, pkgID, false); err != nil {
 					printWarning("Failed to ignore %s: %v", pkg.Name, err)
 				}
 			}

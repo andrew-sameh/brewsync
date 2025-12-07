@@ -16,21 +16,33 @@ type AutoDumpConfig struct {
 	CommitMessage string `yaml:"commit_message" mapstructure:"commit_message"`
 }
 
-// PackageIgnoreList holds ignored packages by type
-type PackageIgnoreList struct {
-	Tap    []string `yaml:"tap,omitempty" mapstructure:"tap"`
-	Brew   []string `yaml:"brew,omitempty" mapstructure:"brew"`
-	Cask   []string `yaml:"cask,omitempty" mapstructure:"cask"`
-	VSCode []string `yaml:"vscode,omitempty" mapstructure:"vscode"`
-	Cursor []string `yaml:"cursor,omitempty" mapstructure:"cursor"`
-	Go     []string `yaml:"go,omitempty" mapstructure:"go"`
-	Mas    []string `yaml:"mas,omitempty" mapstructure:"mas"`
+// DumpConfig configures how dump command works
+type DumpConfig struct {
+	UseBrewBundle bool `yaml:"use_brew_bundle" mapstructure:"use_brew_bundle"` // Use 'brew bundle dump --describe' for Homebrew packages
 }
 
-// IgnoreConfig holds global and per-machine ignore lists
+// PackageIgnoreList holds ignored packages by type
+type PackageIgnoreList struct {
+	Tap         []string `yaml:"tap,omitempty" mapstructure:"tap"`
+	Brew        []string `yaml:"brew,omitempty" mapstructure:"brew"`
+	Cask        []string `yaml:"cask,omitempty" mapstructure:"cask"`
+	VSCode      []string `yaml:"vscode,omitempty" mapstructure:"vscode"`
+	Cursor      []string `yaml:"cursor,omitempty" mapstructure:"cursor"`
+	Antigravity []string `yaml:"antigravity,omitempty" mapstructure:"antigravity"`
+	Go          []string `yaml:"go,omitempty" mapstructure:"go"`
+	Mas         []string `yaml:"mas,omitempty" mapstructure:"mas"`
+}
+
+// IgnoreConfig holds category and package-level ignores
 type IgnoreConfig struct {
-	Global PackageIgnoreList            `yaml:"global" mapstructure:"global"`
-	ByMachine map[string]PackageIgnoreList `yaml:",inline" mapstructure:",remain"`
+	Categories []string          `yaml:"categories"` // Ignore entire categories (e.g., "mas", "go")
+	Packages   PackageIgnoreList `yaml:"packages"`   // Ignore specific packages within non-ignored categories
+}
+
+// IgnoreFile represents the separate ignore.yaml file
+type IgnoreFile struct {
+	Global   IgnoreConfig            `yaml:"global"`   // Global ignores for all machines
+	Machines map[string]IgnoreConfig `yaml:"machines"` // Per-machine ignores
 }
 
 // MachineSpecificConfig holds packages specific to each machine
@@ -68,11 +80,14 @@ type Config struct {
 	DefaultSource      string                 `yaml:"default_source" mapstructure:"default_source"`
 	DefaultCategories  []string               `yaml:"default_categories" mapstructure:"default_categories"`
 	AutoDump           AutoDumpConfig         `yaml:"auto_dump" mapstructure:"auto_dump"`
-	Ignore             IgnoreConfig           `yaml:"ignore" mapstructure:"ignore"`
+	Dump               DumpConfig             `yaml:"dump" mapstructure:"dump"`
 	MachineSpecific    MachineSpecificConfig  `yaml:"machine_specific" mapstructure:"machine_specific"`
 	ConflictResolution ConflictResolution     `yaml:"conflict_resolution" mapstructure:"conflict_resolution"`
 	Output             OutputConfig           `yaml:"output" mapstructure:"output"`
 	Hooks              HooksConfig            `yaml:"hooks" mapstructure:"hooks"`
+
+	// Loaded separately from ignore.yaml (not in YAML)
+	ignoreFile *IgnoreFile
 }
 
 // GetMachine returns the machine config for the given name
@@ -86,29 +101,66 @@ func (c *Config) GetCurrentMachine() (Machine, bool) {
 	return c.GetMachine(c.CurrentMachine)
 }
 
+// GetIgnoredCategories returns all ignored categories for a machine (global + machine-specific)
+func (c *Config) GetIgnoredCategories(machine string) []string {
+	if c.ignoreFile == nil {
+		return []string{}
+	}
+
+	seen := make(map[string]bool)
+	var result []string
+
+	// Add global ignored categories
+	for _, cat := range c.ignoreFile.Global.Categories {
+		if !seen[cat] {
+			seen[cat] = true
+			result = append(result, cat)
+		}
+	}
+
+	// Add machine-specific ignored categories
+	if machineIgnore, ok := c.ignoreFile.Machines[machine]; ok {
+		for _, cat := range machineIgnore.Categories {
+			if !seen[cat] {
+				seen[cat] = true
+				result = append(result, cat)
+			}
+		}
+	}
+
+	return result
+}
+
 // GetIgnoredPackages returns all ignored package IDs for a machine (global + machine-specific)
 // Package IDs are in format "type:name" (e.g., "cask:bluestacks")
+// Does NOT include packages from ignored categories
 func (c *Config) GetIgnoredPackages(machine string) []string {
+	if c.ignoreFile == nil {
+		return []string{}
+	}
+
 	var result []string
 
 	// Add global ignored packages
-	result = append(result, addPrefix("tap", c.Ignore.Global.Tap)...)
-	result = append(result, addPrefix("brew", c.Ignore.Global.Brew)...)
-	result = append(result, addPrefix("cask", c.Ignore.Global.Cask)...)
-	result = append(result, addPrefix("vscode", c.Ignore.Global.VSCode)...)
-	result = append(result, addPrefix("cursor", c.Ignore.Global.Cursor)...)
-	result = append(result, addPrefix("go", c.Ignore.Global.Go)...)
-	result = append(result, addPrefix("mas", c.Ignore.Global.Mas)...)
+	result = append(result, addPrefix("tap", c.ignoreFile.Global.Packages.Tap)...)
+	result = append(result, addPrefix("brew", c.ignoreFile.Global.Packages.Brew)...)
+	result = append(result, addPrefix("cask", c.ignoreFile.Global.Packages.Cask)...)
+	result = append(result, addPrefix("vscode", c.ignoreFile.Global.Packages.VSCode)...)
+	result = append(result, addPrefix("cursor", c.ignoreFile.Global.Packages.Cursor)...)
+	result = append(result, addPrefix("antigravity", c.ignoreFile.Global.Packages.Antigravity)...)
+	result = append(result, addPrefix("go", c.ignoreFile.Global.Packages.Go)...)
+	result = append(result, addPrefix("mas", c.ignoreFile.Global.Packages.Mas)...)
 
 	// Add machine-specific ignored packages
-	if machineIgnore, ok := c.Ignore.ByMachine[machine]; ok {
-		result = append(result, addPrefix("tap", machineIgnore.Tap)...)
-		result = append(result, addPrefix("brew", machineIgnore.Brew)...)
-		result = append(result, addPrefix("cask", machineIgnore.Cask)...)
-		result = append(result, addPrefix("vscode", machineIgnore.VSCode)...)
-		result = append(result, addPrefix("cursor", machineIgnore.Cursor)...)
-		result = append(result, addPrefix("go", machineIgnore.Go)...)
-		result = append(result, addPrefix("mas", machineIgnore.Mas)...)
+	if machineIgnore, ok := c.ignoreFile.Machines[machine]; ok {
+		result = append(result, addPrefix("tap", machineIgnore.Packages.Tap)...)
+		result = append(result, addPrefix("brew", machineIgnore.Packages.Brew)...)
+		result = append(result, addPrefix("cask", machineIgnore.Packages.Cask)...)
+		result = append(result, addPrefix("vscode", machineIgnore.Packages.VSCode)...)
+		result = append(result, addPrefix("cursor", machineIgnore.Packages.Cursor)...)
+		result = append(result, addPrefix("antigravity", machineIgnore.Packages.Antigravity)...)
+		result = append(result, addPrefix("go", machineIgnore.Packages.Go)...)
+		result = append(result, addPrefix("mas", machineIgnore.Packages.Mas)...)
 	}
 
 	return result
@@ -126,12 +178,50 @@ func (c *Config) GetMachineSpecificPackages() map[string][]string {
 		ids = append(ids, addPrefix("cask", pkgs.Cask)...)
 		ids = append(ids, addPrefix("vscode", pkgs.VSCode)...)
 		ids = append(ids, addPrefix("cursor", pkgs.Cursor)...)
+		ids = append(ids, addPrefix("antigravity", pkgs.Antigravity)...)
 		ids = append(ids, addPrefix("go", pkgs.Go)...)
 		ids = append(ids, addPrefix("mas", pkgs.Mas)...)
 		result[machine] = ids
 	}
 
 	return result
+}
+
+// IsCategoryIgnored checks if an entire package category is ignored
+func (c *Config) IsCategoryIgnored(machine, pkgType string) bool {
+	if c.ignoreFile == nil {
+		return false
+	}
+
+	// Check global ignored categories
+	for _, cat := range c.ignoreFile.Global.Categories {
+		if cat == pkgType {
+			return true
+		}
+	}
+
+	// Check machine-specific ignored categories
+	if machineIgnore, ok := c.ignoreFile.Machines[machine]; ok {
+		for _, cat := range machineIgnore.Categories {
+			if cat == pkgType {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+// IsPackageIgnored checks if a specific package is ignored (not category)
+// Package ID format: "type:name" (e.g., "cask:bluestacks")
+func (c *Config) IsPackageIgnored(machine, pkgID string) bool {
+	ignoredPackages := c.GetIgnoredPackages(machine)
+	for _, ignored := range ignoredPackages {
+		if ignored == pkgID {
+			return true
+		}
+	}
+	return false
 }
 
 // addPrefix adds a type prefix to each package name

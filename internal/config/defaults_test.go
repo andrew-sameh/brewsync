@@ -7,13 +7,13 @@ import (
 )
 
 func TestDefaultCategories(t *testing.T) {
-	expected := []string{"tap", "brew", "cask", "vscode", "cursor", "go", "mas"}
+	expected := []string{"tap", "brew", "cask", "vscode", "cursor", "antigravity", "go", "mas"}
 	assert.Equal(t, expected, DefaultCategories)
 }
 
 func TestDefaultCategories_ContainsAllTypes(t *testing.T) {
 	// Ensure all expected package types are in defaults
-	expectedTypes := []string{"tap", "brew", "cask", "vscode", "cursor", "go", "mas"}
+	expectedTypes := []string{"tap", "brew", "cask", "vscode", "cursor", "antigravity", "go", "mas"}
 
 	for _, expectedType := range expectedTypes {
 		assert.Contains(t, DefaultCategories, expectedType,

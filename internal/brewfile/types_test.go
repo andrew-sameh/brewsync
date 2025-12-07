@@ -9,12 +9,13 @@ import (
 func TestAllTypes(t *testing.T) {
 	types := AllTypes()
 
-	assert.Len(t, types, 7)
+	assert.Len(t, types, 8)
 	assert.Contains(t, types, TypeTap)
 	assert.Contains(t, types, TypeBrew)
 	assert.Contains(t, types, TypeCask)
 	assert.Contains(t, types, TypeVSCode)
 	assert.Contains(t, types, TypeCursor)
+	assert.Contains(t, types, TypeAntigravity)
 	assert.Contains(t, types, TypeGo)
 	assert.Contains(t, types, TypeMas)
 }
@@ -191,4 +192,51 @@ func TestPackages_Empty(t *testing.T) {
 	assert.Len(t, packages.Filter(TypeBrew), 0)
 	assert.Len(t, packages.Names(), 0)
 	assert.False(t, packages.Contains("brew:git"))
+}
+
+func TestPackages_AddUnique(t *testing.T) {
+	existing := Packages{
+		NewPackage(TypeBrew, "git"),
+		NewPackage(TypeCask, "raycast"),
+	}
+
+	// Add new packages
+	newPkgs := Packages{
+		NewPackage(TypeBrew, "fzf"),
+		NewPackage(TypeBrew, "git"), // Duplicate
+	}
+
+	result := existing.AddUnique(newPkgs...)
+	assert.Len(t, result, 3) // Should only add fzf, not duplicate git
+
+	// Verify git appears only once
+	gitCount := 0
+	for _, p := range result {
+		if p.Name == "git" {
+			gitCount++
+		}
+	}
+	assert.Equal(t, 1, gitCount)
+}
+
+func TestPackages_MergeUnique(t *testing.T) {
+	list1 := Packages{
+		Package{Type: TypeBrew, Name: "git", Description: "Old description"},
+		NewPackage(TypeCask, "raycast"),
+	}
+
+	list2 := Packages{
+		Package{Type: TypeBrew, Name: "git", Description: "New description"},
+		NewPackage(TypeBrew, "fzf"),
+	}
+
+	result := list1.MergeUnique(list2)
+	assert.Len(t, result, 3) // git, raycast, fzf
+
+	// Verify git has the new description (from list2)
+	for _, p := range result {
+		if p.Name == "git" {
+			assert.Equal(t, "New description", p.Description)
+		}
+	}
 }

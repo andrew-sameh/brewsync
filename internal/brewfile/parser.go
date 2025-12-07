@@ -30,6 +30,8 @@ var (
 	vscodePattern = regexp.MustCompile(`^vscode\s+"([^"]+)"`)
 	// Match: cursor "name" (BrewSync extension)
 	cursorPattern = regexp.MustCompile(`^cursor\s+"([^"]+)"`)
+	// Match: antigravity "name" (BrewSync extension)
+	antigravityPattern = regexp.MustCompile(`^antigravity\s+"([^"]+)"`)
 	// Match: go "name" (BrewSync extension)
 	goPattern = regexp.MustCompile(`^go\s+"([^"]+)"`)
 	// Match options like: link: true, args: ["--foo"]
@@ -47,21 +49,37 @@ func (p *Parser) ParseFile(path string) (Packages, error) {
 	var packages Packages
 	scanner := bufio.NewScanner(file)
 	lineNum := 0
+	var lastComment string // Track comment from previous line
 
 	for scanner.Scan() {
 		lineNum++
 		line := strings.TrimSpace(scanner.Text())
 
-		// Skip empty lines and comments
-		if line == "" || strings.HasPrefix(line, "#") {
+		// Skip empty lines
+		if line == "" {
+			continue
+		}
+
+		// Capture comments as potential descriptions
+		if strings.HasPrefix(line, "#") {
+			// Extract comment text (remove leading # and whitespace)
+			lastComment = strings.TrimSpace(strings.TrimPrefix(line, "#"))
 			continue
 		}
 
 		pkg, ok := p.parseLine(line)
 		if !ok {
 			// Skip lines that don't match any pattern
+			lastComment = "" // Reset if we skip a line
 			continue
 		}
+
+		// Attach the last comment as description if available
+		if lastComment != "" {
+			pkg.Description = lastComment
+			lastComment = "" // Reset after using
+		}
+
 		packages = append(packages, pkg)
 	}
 
@@ -76,19 +94,35 @@ func (p *Parser) ParseFile(path string) (Packages, error) {
 func (p *Parser) ParseString(content string) (Packages, error) {
 	var packages Packages
 	scanner := bufio.NewScanner(strings.NewReader(content))
+	var lastComment string // Track comment from previous line
 
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 
-		// Skip empty lines and comments
-		if line == "" || strings.HasPrefix(line, "#") {
+		// Skip empty lines
+		if line == "" {
+			continue
+		}
+
+		// Capture comments as potential descriptions
+		if strings.HasPrefix(line, "#") {
+			// Extract comment text (remove leading # and whitespace)
+			lastComment = strings.TrimSpace(strings.TrimPrefix(line, "#"))
 			continue
 		}
 
 		pkg, ok := p.parseLine(line)
 		if !ok {
+			lastComment = "" // Reset if we skip a line
 			continue
 		}
+
+		// Attach the last comment as description if available
+		if lastComment != "" {
+			pkg.Description = lastComment
+			lastComment = "" // Reset after using
+		}
+
 		packages = append(packages, pkg)
 	}
 
@@ -136,6 +170,10 @@ func (p *Parser) parseLine(line string) (Package, bool) {
 
 	if matches := cursorPattern.FindStringSubmatch(line); matches != nil {
 		return NewPackage(TypeCursor, matches[1]), true
+	}
+
+	if matches := antigravityPattern.FindStringSubmatch(line); matches != nil {
+		return NewPackage(TypeAntigravity, matches[1]), true
 	}
 
 	if matches := goPattern.FindStringSubmatch(line); matches != nil {

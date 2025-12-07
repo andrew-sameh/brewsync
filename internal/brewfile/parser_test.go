@@ -267,3 +267,57 @@ cask "raycast"
 	require.NoError(t, err)
 	assert.Len(t, packages, 2) // Only valid lines
 }
+
+func TestParser_ParseString_WithDescriptions(t *testing.T) {
+	content := `# Clone of cat(1) with syntax highlighting and Git integration
+brew "bat"
+# Lightweight and flexible command-line JSON processor
+brew "jq"
+
+# GPU-accelerated terminal emulator
+cask "alacritty"
+
+# No description here
+tap "homebrew/bundle"`
+
+	parser := NewParser()
+	packages, err := parser.ParseString(content)
+	require.NoError(t, err)
+	assert.Len(t, packages, 4)
+
+	// bat should have description
+	assert.Equal(t, TypeBrew, packages[0].Type)
+	assert.Equal(t, "bat", packages[0].Name)
+	assert.Equal(t, "Clone of cat(1) with syntax highlighting and Git integration", packages[0].Description)
+
+	// jq should have description
+	assert.Equal(t, TypeBrew, packages[1].Type)
+	assert.Equal(t, "jq", packages[1].Name)
+	assert.Equal(t, "Lightweight and flexible command-line JSON processor", packages[1].Description)
+
+	// alacritty should have description
+	assert.Equal(t, TypeCask, packages[2].Type)
+	assert.Equal(t, "alacritty", packages[2].Name)
+	assert.Equal(t, "GPU-accelerated terminal emulator", packages[2].Description)
+
+	// tap should have description
+	assert.Equal(t, TypeTap, packages[3].Type)
+	assert.Equal(t, "homebrew/bundle", packages[3].Name)
+	assert.Equal(t, "No description here", packages[3].Description)
+}
+
+func TestParser_ParseString_NoDescription(t *testing.T) {
+	content := `brew "git"
+brew "fzf"
+cask "raycast"`
+
+	parser := NewParser()
+	packages, err := parser.ParseString(content)
+	require.NoError(t, err)
+	assert.Len(t, packages, 3)
+
+	// Packages without preceding comments should have empty descriptions
+	for _, pkg := range packages {
+		assert.Empty(t, pkg.Description)
+	}
+}

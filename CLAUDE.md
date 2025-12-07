@@ -38,16 +38,33 @@ Optional curated groups of packages (e.g., `core`, `dev-go`, `k8s`). Profiles ar
 | `cask` | Homebrew casks | `raycast`, `slack` |
 | `vscode` | VSCode extensions | `golang.go` |
 | `cursor` | Cursor extensions | `ms-python.python` |
+| `antigravity` | Antigravity editor extensions | `python.lsp` |
 | `go` | Go tools | `golang.org/x/tools/gopls` |
 | `mas` | Mac App Store | `497799835` (Xcode) |
 
 ### Ignore System
 
-Packages can be ignored globally or per-machine via:
-- Interactive selection (press `i` in TUI)
-- Config file (`ignore` section)
-- CLI command (`brewsync ignore add`)
-- Inline flag (`--ignore "cask:app"`)
+Ignores are stored in a separate `~/.config/brewsync/ignore.yaml` file with two explicit layers:
+
+**1. Categories** - Ignore entire package types:
+- Stored in `categories: [...]` list
+- Examples: `mas`, `go`, `antigravity`
+- Effect: ALL packages of that type are ignored
+
+**2. Packages** - Ignore specific packages within non-ignored categories:
+- Stored in `packages:` with type-specific lists
+- Format: `cask: ["app1", "app2"]`
+- Effect: Only specified packages are ignored
+
+**How to add ignores:**
+- Interactive selection: Press `i` in TUI
+- Category command: `brewsync ignore category add mas`
+- Package command: `brewsync ignore add cask:bluestacks`
+- Direct file edit: Edit `~/.config/brewsync/ignore.yaml`
+
+**Scope**: Global (all machines) or per-machine
+
+**Important**: Ignore lists apply to `import`, `sync`, and `diff` operations but **not** to `dump`. The dump command captures everything installed (source of truth), regardless of ignore lists.
 
 ### Machine-Specific Packages
 
@@ -97,7 +114,7 @@ Packages designated for specific machines only:
 
 **Sync Flow**: Load config → Parse Brewfiles → Compute additions & removals → Filter → Preview (dry-run default) → On `--apply`: execute changes → Log & dump
 
-**Dump Flow**: Run `brew bundle dump` → Append VSCode/Cursor extensions → Append Go tools → Update metadata → Optionally commit/push
+**Dump Flow**: Run `brew bundle dump --describe` (default) → Parse with descriptions → Deduplicate and append VSCode/Cursor/Antigravity/Go/mas extensions → Write Brewfile → Update metadata → Optionally commit/push
 
 ---
 
@@ -108,6 +125,7 @@ Packages designated for specific machines only:
 ```
 ~/.config/brewsync/
 ├── config.yaml           # Main configuration
+├── ignore.yaml           # Ignore rules (categories + packages)
 ├── history.log           # Operation history (append-only)
 └── profiles/             # User-defined profiles
     ├── core.yaml
@@ -145,7 +163,7 @@ machines:
 
 current_machine: auto  # or explicit: "mini", "air"
 default_source: mini
-default_categories: [tap, brew, cask, vscode, cursor, go, mas]
+default_categories: [tap, brew, cask, vscode, cursor, antigravity, go, mas]
 
 auto_dump:
   enabled: false
@@ -154,27 +172,18 @@ auto_dump:
   push: false
   commit_message: "brewsync: update {machine} Brewfile"
 
-ignore:
-  global:
-    tap: []
-    brew: []
-    cask: ["company-vpn"]
-    vscode: []
-    cursor: []
-    go: []
-    mas: []
-  mini:
-    cask: ["bluestacks"]
-  air:
-    brew: ["scrcpy"]
+dump:
+  use_brew_bundle: true  # Use 'brew bundle dump --describe' for Homebrew packages (includes descriptions)
 
 machine_specific:
   mini:
     brew: ["postgresql@16", "redis"]
     cask: ["orbstack"]
+    antigravity: []
   air:
     brew: ["ollama"]
     cask: ["ollama-app"]
+    antigravity: []
 
 conflict_resolution: ask  # ask | skip | source-wins | current-wins
 
@@ -188,6 +197,55 @@ hooks:
   post_install: ""
   pre_dump: ""
   post_dump: ""
+```
+
+### Ignore File (`~/.config/brewsync/ignore.yaml`)
+
+```yaml
+# Global ignores (apply to all machines)
+global:
+  categories:
+    - mas           # Ignore ALL Mac App Store apps
+    - go            # Ignore ALL Go tools
+
+  packages:
+    tap: []
+    brew: []
+    cask: ["company-vpn"]
+    vscode: []
+    cursor: []
+    antigravity: []
+    go: []         # Individual packages (if category not ignored)
+    mas: []
+
+# Machine-specific ignores
+machines:
+  mini:
+    categories:
+      - antigravity  # Don't use Antigravity on mini
+
+    packages:
+      tap: []
+      brew: []
+      cask: ["bluestacks"]
+      vscode: []
+      cursor: []
+      antigravity: []
+      go: []
+      mas: []
+
+  air:
+    categories: []
+
+    packages:
+      tap: []
+      brew: ["scrcpy"]
+      cask: []
+      vscode: []
+      cursor: []
+      antigravity: []
+      go: []
+      mas: []
 ```
 
 ### Profile File (`profiles/core.yaml`)
@@ -218,10 +276,55 @@ package_counts:
   cask: 42
   vscode: 120
   cursor: 45
+  antigravity: 12
   go: 9
   mas: 3
 macos_version: "14.2"
 brewsync_version: "1.0.0"
+```
+
+---
+
+## Package Descriptions
+
+The `dump.use_brew_bundle` configuration controls how package descriptions are captured and stored in Brewfiles.
+
+### Default Behavior (use_brew_bundle: true)
+
+- Uses `brew bundle dump --describe` to capture Homebrew descriptions
+- Descriptions stored as comments in Brewfile (# comment above each package)
+- Applied to: tap, brew, cask packages (from Homebrew database)
+- VSCode, Cursor, Antigravity, Go, and mas packages added afterward with deduplication
+- Performance: ~1-2 seconds for 100+ packages
+
+**Example output**:
+```ruby
+# Clone of cat(1) with syntax highlighting and Git integration
+brew "bat"
+# Distributed revision control system
+brew "git"
+# Launcher and productivity tool
+cask "raycast"
+```
+
+### Manual Collection (use_brew_bundle: false)
+
+- Collects packages via individual `brew list` commands
+- No descriptions included (basic list only)
+- Useful for custom workflows or older Homebrew versions
+- Performance: ~5-10 seconds for 100+ packages
+
+### Deduplication Behavior
+
+When collecting extensions (VSCode, Cursor, Antigravity, Go, mas):
+- Uses `AddUnique()` to prevent duplicates with brew bundle output
+- Verbose output shows: `"(X new, Y already in Brewfile)"`
+- If `brew bundle dump` already includes a package (e.g., mas app, vscode extension installed via Homebrew), manual collection skips it
+- Existing packages with descriptions are preserved
+
+**Example verbose output**:
+```
+Found 45 extensions (3 new, 42 already in Brewfile)
 ```
 
 ---
@@ -279,9 +382,19 @@ brewsync config edit                     # Open in $EDITOR
 brewsync config set default_source air   # Set config value
 brewsync config add-machine dev --hostname "Dev-Mac" --brewfile "/path/to/Brewfile"
 
-brewsync ignore list                     # Show ignored packages
-brewsync ignore add "cask:app"           # Add to ignore list
-brewsync ignore add "cask:app" --machine mini  # Machine-specific ignore
+# Ignore commands (two-layer system)
+brewsync ignore category add mas                    # Ignore ALL mas packages globally
+brewsync ignore category add go --machine mini      # Ignore ALL go tools on mini
+brewsync ignore category remove mas                 # Remove category ignore
+brewsync ignore category list                       # List ignored categories
+
+brewsync ignore add cask:app                        # Add package ignore (current machine)
+brewsync ignore add cask:app --global               # Add package ignore (global)
+brewsync ignore add cask:app --machine mini         # Add package ignore (specific machine)
+brewsync ignore remove cask:app                     # Remove package ignore
+brewsync ignore list                                # Show all ignores (categories + packages)
+brewsync ignore path                                # Show ignore file location
+brewsync ignore init                                # Create default ignore.yaml
 ```
 
 ### Global Flags
@@ -419,6 +532,7 @@ brewsync/
 │   │   ├── brew.go                # BrewInstaller - taps, formulae, casks
 │   │   ├── vscode.go              # VSCodeInstaller
 │   │   ├── cursor.go              # CursorInstaller
+│   │   ├── antigravity.go         # AntigravityInstaller
 │   │   ├── mas.go                 # MasInstaller (Mac App Store)
 │   │   └── gotools.go             # GoToolsInstaller
 │   ├── tui/                       # Bubble Tea UI components
@@ -444,9 +558,11 @@ brewsync/
 ### brewfile.Package
 ```go
 type Package struct {
-    Type    PackageType // tap, brew, cask, vscode, cursor, go, mas
-    Name    string      // Package identifier
-    Options string      // Optional: "link: true", "id: 123"
+    Type        PackageType       // tap, brew, cask, vscode, cursor, antigravity, go, mas
+    Name        string            // Package identifier
+    FullName    string            // For mas: app name
+    Options     map[string]string // link: true, id: 123, etc.
+    Description string            // From brew bundle dump --describe
 }
 func (p Package) ID() string  // Returns "type:name"
 ```
@@ -528,6 +644,32 @@ history.LogSync(machine, source, addedCount, removedCount)
 history.LogDump(machine, map[string]int{"brew": 10}, committed)
 ```
 
+### Deduplication Patterns
+
+When dumping packages, BrewSync handles deduplication automatically:
+
+**Adding Unique Packages**:
+```go
+// Add packages that don't already exist
+allPackages = allPackages.AddUnique(extensions...)
+
+// Usage: Adds VSCode/Cursor/Antigravity/Go packages only if not from brew bundle dump
+beforeCount := len(allPackages)
+allPackages = allPackages.AddUnique(vscodeExtensions...)
+addedCount := len(allPackages) - beforeCount
+printVerbose("Found %d extensions (%d new, %d already in Brewfile)",
+    len(vscodeExtensions), addedCount, len(vscodeExtensions)-addedCount)
+```
+
+**Merging Lists with Preservation**:
+```go
+// Merge two lists, keeping packages with best descriptions
+merged := list1.MergeUnique(list2)
+// If a package exists in both, list2's version is used (better descriptions)
+```
+
+This pattern prevents duplicate entries when collecting from multiple sources (e.g., `brew bundle dump` may include VSCode extensions installed via Homebrew casks, so manual VSCode extension collection should skip duplicates).
+
 ---
 
 ## Testing
@@ -544,6 +686,20 @@ Test files use `_test.go` suffix. Key test coverage:
 - `exec`: 100% - command execution
 - `history`: 26% - log parsing
 
+### Using Makefile
+
+The Makefile provides convenient shortcuts for testing:
+
+```bash
+make test              # Run all tests
+make test-coverage     # With coverage report
+make test-specific PKG=./internal/brewfile  # Test specific package
+make test-race         # With race detector
+make test-bench        # Run benchmarks
+```
+
+See [MAKEFILE_GUIDE.md](MAKEFILE_GUIDE.md) for complete testing documentation.
+
 ---
 
 ## Build Commands
@@ -557,20 +713,70 @@ go run ./cmd/brewsync --help             # Run directly
 
 ---
 
+## Build System & Makefile
+
+The project includes a comprehensive Makefile with 50+ commands organized into categories.
+
+### Quick Reference
+
+**Development**:
+- `make dev` - Build and show version
+- `make quick` - Build and test (fastest)
+- `make ci` - Run CI checks (format, vet, test)
+- `make pre-commit` - Pre-commit checklist
+
+**Testing**:
+- `make test` - Run all tests
+- `make test-coverage` - With coverage report
+- `make test-coverage-detail` - Generate coverage.html
+- `make test-race` - Run with race detector
+- `make test-bench` - Run benchmarks
+
+**Build & Release**:
+- `make build` - Build to ./bin/brewsync
+- `make release` - Optimized release build
+- `make install` - Install to GOPATH/bin
+- `make clean` - Clean build artifacts
+
+**Code Quality**:
+- `make fmt` - Format with gofmt
+- `make vet` - Run go vet
+- `make lint` - Run golangci-lint
+- `make check` - Run fmt + vet
+
+**Dependencies**:
+- `make deps` - Download dependencies
+- `make deps-tidy` - Tidy dependencies
+- `make deps-verify` - Verify dependencies
+- `make deps-update` - Update all dependencies
+
+**Manual Testing**:
+- `make test-setup` - Setup test environment
+- `make test-cleanup` - Clean test environment
+
+For complete documentation, see [MAKEFILE_GUIDE.md](MAKEFILE_GUIDE.md).
+
+---
+
 ## Brewfile Format
 
 Standard Homebrew Bundle format plus BrewSync extensions:
 
 ```ruby
-# Standard entries
+# Standard entries with descriptions
 tap "homebrew/bundle"
+# Distributed revision control system
 brew "git"
 brew "libpq", link: true
+# Launcher and productivity tool
 cask "raycast"
 mas "Xcode", id: 497799835
 vscode "golang.go"
 
 # BrewSync extensions
 cursor "golang.go"
+antigravity "python.lsp"
 go "golang.org/x/tools/gopls"
 ```
+
+**Package Descriptions**: Comments above packages (e.g., `# Distributed revision control system`) are automatically captured by `brew bundle dump --describe` when `dump.use_brew_bundle: true` (default). This makes your Brewfile self-documenting and helps when reviewing packages across machines.

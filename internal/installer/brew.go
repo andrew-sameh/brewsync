@@ -36,7 +36,8 @@ func (b *BrewInstaller) ListTaps() (brewfile.Packages, error) {
 	return packages, nil
 }
 
-// ListFormulae returns all installed formulae
+// ListFormulae returns all installed formulae (without descriptions)
+// Use 'brew bundle dump --describe' via DumpToFile for descriptions
 func (b *BrewInstaller) ListFormulae() (brewfile.Packages, error) {
 	lines, err := b.runner.RunLines("brew", "list", "--formula", "-1")
 	if err != nil {
@@ -53,7 +54,8 @@ func (b *BrewInstaller) ListFormulae() (brewfile.Packages, error) {
 	return packages, nil
 }
 
-// ListCasks returns all installed casks
+// ListCasks returns all installed casks (without descriptions)
+// Use 'brew bundle dump --describe' via DumpToFile for descriptions
 func (b *BrewInstaller) ListCasks() (brewfile.Packages, error) {
 	lines, err := b.runner.RunLines("brew", "list", "--cask", "-1")
 	if err != nil {
@@ -139,8 +141,10 @@ func (b *BrewInstaller) IsAvailable() bool {
 	return b.runner.Exists("brew")
 }
 
-// DumpToFile runs brew bundle dump to a file
+// DumpToFile runs brew bundle dump to a file with descriptions
+// This uses 'brew bundle dump --describe' which automatically includes
+// package descriptions as comments in the output Brewfile
 func (b *BrewInstaller) DumpToFile(path string) error {
-	_, err := b.runner.Run("brew", "bundle", "dump", "--force", "--file="+path)
+	_, err := b.runner.Run("brew", "bundle", "dump", "--force", "--describe", "--file="+path)
 	return err
 }

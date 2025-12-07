@@ -9,13 +9,14 @@ import (
 type PackageType string
 
 const (
-	TypeTap    PackageType = "tap"
-	TypeBrew   PackageType = "brew"
-	TypeCask   PackageType = "cask"
-	TypeVSCode PackageType = "vscode"
-	TypeCursor PackageType = "cursor"
-	TypeGo     PackageType = "go"
-	TypeMas    PackageType = "mas"
+	TypeTap         PackageType = "tap"
+	TypeBrew        PackageType = "brew"
+	TypeCask        PackageType = "cask"
+	TypeVSCode      PackageType = "vscode"
+	TypeCursor      PackageType = "cursor"
+	TypeAntigravity PackageType = "antigravity"
+	TypeGo          PackageType = "go"
+	TypeMas         PackageType = "mas"
 )
 
 // AllTypes returns all package types
@@ -26,6 +27,7 @@ func AllTypes() []PackageType {
 		TypeCask,
 		TypeVSCode,
 		TypeCursor,
+		TypeAntigravity,
 		TypeGo,
 		TypeMas,
 	}
@@ -44,6 +46,8 @@ func ParsePackageType(s string) (PackageType, error) {
 		return TypeVSCode, nil
 	case "cursor":
 		return TypeCursor, nil
+	case "antigravity", "agy":
+		return TypeAntigravity, nil
 	case "go":
 		return TypeGo, nil
 	case "mas":
@@ -141,4 +145,41 @@ func (ps Packages) Contains(id string) bool {
 		}
 	}
 	return false
+}
+
+// AddUnique appends packages that don't already exist in the collection
+// Returns the updated Packages with only unique packages added
+func (ps Packages) AddUnique(packages ...Package) Packages {
+	result := ps
+	for _, pkg := range packages {
+		if !ps.Contains(pkg.ID()) {
+			result = append(result, pkg)
+		}
+	}
+	return result
+}
+
+// MergeUnique combines two package lists, removing duplicates
+// If a package exists in both, the one from 'other' is used (preserving descriptions)
+func (ps Packages) MergeUnique(other Packages) Packages {
+	// Create a map for quick lookup
+	seen := make(map[string]Package)
+
+	// Add packages from current list
+	for _, p := range ps {
+		seen[p.ID()] = p
+	}
+
+	// Add or update with packages from other list
+	for _, p := range other {
+		seen[p.ID()] = p
+	}
+
+	// Convert back to slice
+	result := make(Packages, 0, len(seen))
+	for _, p := range seen {
+		result = append(result, p)
+	}
+
+	return result
 }

@@ -52,6 +52,10 @@ func (w *Writer) Format() string {
 		}
 
 		for _, p := range pkgs {
+			// Add description as a comment if available
+			if p.Description != "" {
+				sb.WriteString(fmt.Sprintf("# %s\n", p.Description))
+			}
 			sb.WriteString(formatPackage(p))
 			sb.WriteString("\n")
 		}
@@ -94,6 +98,9 @@ func formatPackage(p Package) string {
 
 	case TypeCursor:
 		return fmt.Sprintf(`cursor "%s"`, p.Name)
+
+	case TypeAntigravity:
+		return fmt.Sprintf(`antigravity "%s"`, p.Name)
 
 	case TypeGo:
 		return fmt.Sprintf(`go "%s"`, p.Name)

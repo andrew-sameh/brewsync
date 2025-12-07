@@ -1,0 +1,52 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool, specifically when used with LiteIDE
+*.out
+
+# Go workspace file
+go.work
+go.work.sum
+
+# Build artifacts
+/bin/
+/dist/
+/brewsync
+/brewsync-debug
+
+# Test coverage
+coverage.out
+coverage.html
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Dependency directories
+vendor/
+
+# Temporary files
+*.tmp
+*.temp
+
+# Test environment
+/brewsync-test-dotfiles/
+
+# Local config overrides (for testing)
+.config-local.yaml
+
+# OS-specific files
+Thumbs.db
+.Spotlight-V100
+.Trashes

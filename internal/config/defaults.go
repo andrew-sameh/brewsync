@@ -9,6 +9,7 @@ var DefaultCategories = []string{
 	"cask",
 	"vscode",
 	"cursor",
+	"antigravity",
 	"go",
 	"mas",
 }
@@ -30,6 +31,9 @@ func setDefaults() {
 	viper.SetDefault("auto_dump.commit", false)
 	viper.SetDefault("auto_dump.push", false)
 	viper.SetDefault("auto_dump.commit_message", DefaultCommitMessage)
+
+	// Dump settings
+	viper.SetDefault("dump.use_brew_bundle", true) // Use 'brew bundle dump --describe' by default
 
 	// Conflict resolution
 	viper.SetDefault("conflict_resolution", string(ConflictAsk))

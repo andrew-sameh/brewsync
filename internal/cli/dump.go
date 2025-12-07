@@ -26,6 +26,7 @@ to the machine's Brewfile. This includes:
 - Homebrew taps, formulae, and casks
 - VSCode extensions
 - Cursor extensions
+- Antigravity extensions
 - Go tools
 - Mac App Store apps
 
@@ -66,13 +67,33 @@ func runDump(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to create directory %s: %w", dir, err)
 	}
 
-	// Collect all packages
+	// Collect packages
 	var allPackages brewfile.Packages
-
-	// Homebrew packages
 	brewInst := installer.NewBrewInstaller()
-	if brewInst.IsAvailable() {
-		printVerbose("Collecting Homebrew packages...")
+
+	// Use brew bundle dump if configured (default), otherwise collect manually
+	if cfg.Dump.UseBrewBundle && brewInst.IsAvailable() {
+		printVerbose("Using 'brew bundle dump --describe' for Homebrew packages...")
+
+		// Create temp file for brew bundle dump
+		tmpFile := brewfilePath + ".brewbundle.tmp"
+		if err := brewInst.DumpToFile(tmpFile); err != nil {
+			printWarning("Failed to run 'brew bundle dump': %v", err)
+		} else {
+			// Parse the brew bundle output (includes taps, formulae, casks with descriptions)
+			brewPkgs, err := brewfile.Parse(tmpFile)
+			if err != nil {
+				printWarning("Failed to parse brew bundle output: %v", err)
+			} else {
+				allPackages = append(allPackages, brewPkgs...)
+				printVerbose("  Found %d Homebrew packages (with descriptions)", len(brewPkgs))
+			}
+			// Clean up temp file
+			os.Remove(tmpFile)
+		}
+	} else if brewInst.IsAvailable() {
+		// Manual collection (without descriptions for now, but could add them)
+		printVerbose("Collecting Homebrew packages manually...")
 
 		taps, err := brewInst.ListTaps()
 		if err != nil {
@@ -101,7 +122,7 @@ func runDump(cmd *cobra.Command, args []string) error {
 		printWarning("Homebrew not available, skipping brew packages")
 	}
 
-	// VSCode extensions
+	// VSCode extensions (only add if not already in brew bundle dump output)
 	vscodeInst := installer.NewVSCodeInstaller()
 	if vscodeInst.IsAvailable() {
 		printVerbose("Collecting VSCode extensions...")
@@ -109,14 +130,16 @@ func runDump(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			printWarning("Failed to list VSCode extensions: %v", err)
 		} else {
-			allPackages = append(allPackages, extensions...)
-			printVerbose("  Found %d extensions", len(extensions))
+			beforeCount := len(allPackages)
+			allPackages = allPackages.AddUnique(extensions...)
+			addedCount := len(allPackages) - beforeCount
+			printVerbose("  Found %d extensions (%d new, %d already in Brewfile)", len(extensions), addedCount, len(extensions)-addedCount)
 		}
 	} else {
 		printVerbose("VSCode CLI not available, skipping extensions")
 	}
 
-	// Cursor extensions
+	// Cursor extensions (only add if not already in brew bundle dump output)
 	cursorInst := installer.NewCursorInstaller()
 	if cursorInst.IsAvailable() {
 		printVerbose("Collecting Cursor extensions...")
@@ -124,14 +147,33 @@ func runDump(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			printWarning("Failed to list Cursor extensions: %v", err)
 		} else {
-			allPackages = append(allPackages, extensions...)
-			printVerbose("  Found %d extensions", len(extensions))
+			beforeCount := len(allPackages)
+			allPackages = allPackages.AddUnique(extensions...)
+			addedCount := len(allPackages) - beforeCount
+			printVerbose("  Found %d extensions (%d new, %d already in Brewfile)", len(extensions), addedCount, len(extensions)-addedCount)
 		}
 	} else {
 		printVerbose("Cursor CLI not available, skipping extensions")
 	}
 
-	// Go tools
+	// Antigravity extensions (only add if not already in brew bundle dump output)
+	antigravityInst := installer.NewAntigravityInstaller()
+	if antigravityInst.IsAvailable() {
+		printVerbose("Collecting Antigravity extensions...")
+		extensions, err := antigravityInst.List()
+		if err != nil {
+			printWarning("Failed to list Antigravity extensions: %v", err)
+		} else {
+			beforeCount := len(allPackages)
+			allPackages = allPackages.AddUnique(extensions...)
+			addedCount := len(allPackages) - beforeCount
+			printVerbose("  Found %d extensions (%d new, %d already in Brewfile)", len(extensions), addedCount, len(extensions)-addedCount)
+		}
+	} else {
+		printVerbose("Antigravity CLI not available, skipping extensions")
+	}
+
+	// Go tools (only add if not already in brew bundle dump output)
 	goInst := installer.NewGoToolsInstaller()
 	if goInst.IsAvailable() {
 		printVerbose("Collecting Go tools...")
@@ -139,14 +181,16 @@ func runDump(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			printWarning("Failed to list Go tools: %v", err)
 		} else {
-			allPackages = append(allPackages, tools...)
-			printVerbose("  Found %d tools", len(tools))
+			beforeCount := len(allPackages)
+			allPackages = allPackages.AddUnique(tools...)
+			addedCount := len(allPackages) - beforeCount
+			printVerbose("  Found %d tools (%d new, %d already in Brewfile)", len(tools), addedCount, len(tools)-addedCount)
 		}
 	} else {
 		printVerbose("Go not available, skipping tools")
 	}
 
-	// Mac App Store apps
+	// Mac App Store apps (only add if not already in brew bundle dump output)
 	masInst := installer.NewMasInstaller()
 	if masInst.IsAvailable() {
 		printVerbose("Collecting Mac App Store apps...")
@@ -154,8 +198,10 @@ func runDump(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			printWarning("Failed to list Mac App Store apps: %v", err)
 		} else {
-			allPackages = append(allPackages, apps...)
-			printVerbose("  Found %d apps", len(apps))
+			beforeCount := len(allPackages)
+			allPackages = allPackages.AddUnique(apps...)
+			addedCount := len(allPackages) - beforeCount
+			printVerbose("  Found %d apps (%d new, %d already in Brewfile)", len(apps), addedCount, len(apps)-addedCount)
 		}
 	} else {
 		printVerbose("mas CLI not available, skipping App Store apps")

@@ -163,21 +163,29 @@ func packageNames(pkgs brewfile.Packages) map[string][]string {
 }
 
 func outputDiffTable(diff *brewfile.DiffResult, source, current string) error {
+	cfg, _ := config.Get()
+
 	if diff.IsEmpty() {
 		printInfo("No differences between %s and %s", source, current)
 		return nil
 	}
 
+	// Get ignored packages for current machine
+	ignoredIDs := make(map[string]bool)
+	for _, id := range cfg.GetIgnoredPackages(current) {
+		ignoredIDs[id] = true
+	}
+
 	// Print additions
 	if len(diff.Additions) > 0 {
 		fmt.Printf("\nTo be installed (from %s): %d packages\n", source, len(diff.Additions))
-		printPackagesByType(diff.Additions, "+")
+		printPackagesByTypeWithIgnore(diff.Additions, "+", ignoredIDs)
 	}
 
 	// Print removals
 	if len(diff.Removals) > 0 {
 		fmt.Printf("\nTo be removed (not in %s): %d packages\n", source, len(diff.Removals))
-		printPackagesByType(diff.Removals, "-")
+		printPackagesByTypeWithIgnore(diff.Removals, "-", ignoredIDs)
 	}
 
 	// Summary
@@ -187,6 +195,10 @@ func outputDiffTable(diff *brewfile.DiffResult, source, current string) error {
 }
 
 func printPackagesByType(pkgs brewfile.Packages, prefix string) {
+	printPackagesByTypeWithIgnore(pkgs, prefix, nil)
+}
+
+func printPackagesByTypeWithIgnore(pkgs brewfile.Packages, prefix string, ignoredIDs map[string]bool) {
 	byType := pkgs.ByType()
 	typeOrder := []brewfile.PackageType{
 		brewfile.TypeTap,
@@ -206,7 +218,14 @@ func printPackagesByType(pkgs brewfile.Packages, prefix string) {
 
 		fmt.Printf("  %s (%d):\n", t, len(typePkgs))
 		for _, pkg := range typePkgs {
-			fmt.Printf("    %s %s\n", prefix, pkg.Name)
+			// Check if this package is ignored
+			ignored := ignoredIDs != nil && ignoredIDs[pkg.ID()]
+
+			if ignored {
+				fmt.Printf("    %s %s (ignored)\n", prefix, pkg.Name)
+			} else {
+				fmt.Printf("    %s %s\n", prefix, pkg.Name)
+			}
 		}
 	}
 }
