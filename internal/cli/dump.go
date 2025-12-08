@@ -48,12 +48,12 @@ func init() {
 
 // dumpModel is the Bubble Tea model for the dump progress UI
 type dumpModel struct {
-	spinner     spinner.Model
-	step        string
-	completed   []string
-	done        bool
-	err         error
-	packages    brewfile.Packages
+	spinner        spinner.Model
+	step           string
+	completed      []string
+	done           bool
+	err            error
+	packages       brewfile.Packages
 	packagesByType map[brewfile.PackageType]int
 }
 

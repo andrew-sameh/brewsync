@@ -195,7 +195,7 @@ func TestDiffResult_FilterIgnored(t *testing.T) {
 	}
 
 	ignored := map[string]bool{
-		"brew:fzf":    true,
+		"brew:fzf":     true,
 		"cask:raycast": true,
 	}
 

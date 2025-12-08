@@ -4,31 +4,31 @@ import "github.com/charmbracelet/bubbles/key"
 
 // KeyMap defines all keybindings for the selection UI
 type KeyMap struct {
-	Up           key.Binding
-	Down         key.Binding
-	Left         key.Binding
-	Right        key.Binding
-	Toggle       key.Binding
-	SelectAll    key.Binding
-	SelectNone   key.Binding
-	Confirm      key.Binding
-	Quit         key.Binding
-	Search       key.Binding
-	ClearSearch     key.Binding
-	Ignore          key.Binding
-	IgnoreCategory  key.Binding
-	SaveProfile     key.Binding
-	TabTap       key.Binding
-	TabBrew      key.Binding
-	TabCask      key.Binding
-	TabVSCode    key.Binding
-	TabCursor    key.Binding
-	TabGo        key.Binding
-	TabMas       key.Binding
-	TabAll       key.Binding
-	Help         key.Binding
-	PageUp       key.Binding
-	PageDown     key.Binding
+	Up             key.Binding
+	Down           key.Binding
+	Left           key.Binding
+	Right          key.Binding
+	Toggle         key.Binding
+	SelectAll      key.Binding
+	SelectNone     key.Binding
+	Confirm        key.Binding
+	Quit           key.Binding
+	Search         key.Binding
+	ClearSearch    key.Binding
+	Ignore         key.Binding
+	IgnoreCategory key.Binding
+	SaveProfile    key.Binding
+	TabTap         key.Binding
+	TabBrew        key.Binding
+	TabCask        key.Binding
+	TabVSCode      key.Binding
+	TabCursor      key.Binding
+	TabGo          key.Binding
+	TabMas         key.Binding
+	TabAll         key.Binding
+	Help           key.Binding
+	PageUp         key.Binding
+	PageDown       key.Binding
 }
 
 // DefaultKeyMap returns the default keybindings

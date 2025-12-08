@@ -60,7 +60,7 @@ type Model struct {
 	category          Category
 	searching         bool
 	searchText        textinput.Model
-	filtered          []int            // indices into items that match current filter
+	filtered          []int // indices into items that match current filter
 	keys              KeyMap
 	help              help.Model
 	showHelp          bool
@@ -68,7 +68,7 @@ type Model struct {
 	height            int
 	cancelled         bool
 	confirmed         bool
-	ignoredCategories map[string]bool  // Track categories marked for ignoring
+	ignoredCategories map[string]bool // Track categories marked for ignoring
 }
 
 // New creates a new selection model

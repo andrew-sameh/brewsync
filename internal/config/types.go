@@ -75,16 +75,16 @@ const (
 
 // Config is the main configuration structure
 type Config struct {
-	Machines           map[string]Machine     `yaml:"machines" mapstructure:"machines"`
-	CurrentMachine     string                 `yaml:"current_machine" mapstructure:"current_machine"`
-	DefaultSource      string                 `yaml:"default_source" mapstructure:"default_source"`
-	DefaultCategories  []string               `yaml:"default_categories" mapstructure:"default_categories"`
-	AutoDump           AutoDumpConfig         `yaml:"auto_dump" mapstructure:"auto_dump"`
-	Dump               DumpConfig             `yaml:"dump" mapstructure:"dump"`
-	MachineSpecific    MachineSpecificConfig  `yaml:"machine_specific" mapstructure:"machine_specific"`
-	ConflictResolution ConflictResolution     `yaml:"conflict_resolution" mapstructure:"conflict_resolution"`
-	Output             OutputConfig           `yaml:"output" mapstructure:"output"`
-	Hooks              HooksConfig            `yaml:"hooks" mapstructure:"hooks"`
+	Machines           map[string]Machine    `yaml:"machines" mapstructure:"machines"`
+	CurrentMachine     string                `yaml:"current_machine" mapstructure:"current_machine"`
+	DefaultSource      string                `yaml:"default_source" mapstructure:"default_source"`
+	DefaultCategories  []string              `yaml:"default_categories" mapstructure:"default_categories"`
+	AutoDump           AutoDumpConfig        `yaml:"auto_dump" mapstructure:"auto_dump"`
+	Dump               DumpConfig            `yaml:"dump" mapstructure:"dump"`
+	MachineSpecific    MachineSpecificConfig `yaml:"machine_specific" mapstructure:"machine_specific"`
+	ConflictResolution ConflictResolution    `yaml:"conflict_resolution" mapstructure:"conflict_resolution"`
+	Output             OutputConfig          `yaml:"output" mapstructure:"output"`
+	Hooks              HooksConfig           `yaml:"hooks" mapstructure:"hooks"`
 
 	// Loaded separately from ignore.yaml (not in YAML)
 	ignoreFile *IgnoreFile

@@ -53,14 +53,14 @@ var (
 
 // Lipgloss styles using Catppuccin Mocha palette
 var (
-	styleSuccess = lipgloss.NewStyle().Foreground(catGreen).Bold(true)     // Green
-	styleError   = lipgloss.NewStyle().Foreground(catRed).Bold(true)       // Red
-	styleWarning = lipgloss.NewStyle().Foreground(catPeach).Bold(true)     // Peach
-	styleBold    = lipgloss.NewStyle().Foreground(catLavender).Bold(true)  // Lavender
-	styleDim     = lipgloss.NewStyle().Foreground(catOverlay0)             // Overlay 0
-	styleInfo    = lipgloss.NewStyle().Foreground(catSapphire)             // Sapphire
-	styleMauve   = lipgloss.NewStyle().Foreground(catMauve).Bold(true)     // Mauve
-	styleText    = lipgloss.NewStyle().Foreground(catText)                 // Text
+	styleSuccess = lipgloss.NewStyle().Foreground(catGreen).Bold(true)    // Green
+	styleError   = lipgloss.NewStyle().Foreground(catRed).Bold(true)      // Red
+	styleWarning = lipgloss.NewStyle().Foreground(catPeach).Bold(true)    // Peach
+	styleBold    = lipgloss.NewStyle().Foreground(catLavender).Bold(true) // Lavender
+	styleDim     = lipgloss.NewStyle().Foreground(catOverlay0)            // Overlay 0
+	styleInfo    = lipgloss.NewStyle().Foreground(catSapphire)            // Sapphire
+	styleMauve   = lipgloss.NewStyle().Foreground(catMauve).Bold(true)    // Mauve
+	styleText    = lipgloss.NewStyle().Foreground(catText)                // Text
 )
 
 // rootCmd is the base command

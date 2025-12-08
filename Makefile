@@ -1,7 +1,7 @@
 # BrewSync Makefile
 # Provides common commands for building, testing, and development
 
-.PHONY: help build install test test-coverage test-verbose clean run fmt lint vet dev doctor release
+.PHONY: help build install install-completion test test-coverage test-verbose clean run fmt lint vet dev doctor release
 
 # Variables
 BINARY_NAME=brewsync
@@ -46,6 +46,18 @@ install: ## Install binary to GOPATH/bin
 	@echo "$(COLOR_GREEN)Installing $(BINARY_NAME) to $(INSTALL_PATH)...$(COLOR_RESET)"
 	@go install $(LDFLAGS) $(CMD_DIR)
 	@echo "$(COLOR_GREEN)✓ Installed: $(INSTALL_PATH)/$(BINARY_NAME)$(COLOR_RESET)"
+
+install-completion: install ## Install zsh completion to ~/.zshrc
+	@echo "$(COLOR_GREEN)Installing zsh completion...$(COLOR_RESET)"
+	@if grep -q 'source <(brewsync completion zsh)' ~/.zshrc 2>/dev/null; then \
+		echo "$(COLOR_YELLOW)⚠ Completion already installed in ~/.zshrc$(COLOR_RESET)"; \
+	else \
+		echo '' >> ~/.zshrc; \
+		echo '# BrewSync completion' >> ~/.zshrc; \
+		echo 'source <(brewsync completion zsh)' >> ~/.zshrc; \
+		echo "$(COLOR_GREEN)✓ Added completion to ~/.zshrc$(COLOR_RESET)"; \
+		echo "$(COLOR_BLUE)Run 'exec zsh' or restart your terminal to activate$(COLOR_RESET)"; \
+	fi
 
 release: ## Build optimized release binary
 	@echo "$(COLOR_GREEN)Building release binary...$(COLOR_RESET)"

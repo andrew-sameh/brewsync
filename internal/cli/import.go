@@ -16,9 +16,9 @@ import (
 )
 
 var (
-	importFrom                  string
-	importOnly                  string
-	importSkip                  string
+	importFrom                   string
+	importOnly                   string
+	importSkip                   string
 	importIncludeMachineSpecific bool
 )
 

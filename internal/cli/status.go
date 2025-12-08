@@ -34,12 +34,12 @@ func init() {
 
 // Metadata represents the .brewsync-meta file
 type Metadata struct {
-	Machine        string            `yaml:"machine"`
-	LastDump       time.Time         `yaml:"last_dump"`
-	LastSync       *LastSyncInfo     `yaml:"last_sync,omitempty"`
-	PackageCounts  map[string]int    `yaml:"package_counts"`
-	MacOSVersion   string            `yaml:"macos_version,omitempty"`
-	BrewsyncVersion string           `yaml:"brewsync_version,omitempty"`
+	Machine         string         `yaml:"machine"`
+	LastDump        time.Time      `yaml:"last_dump"`
+	LastSync        *LastSyncInfo  `yaml:"last_sync,omitempty"`
+	PackageCounts   map[string]int `yaml:"package_counts"`
+	MacOSVersion    string         `yaml:"macos_version,omitempty"`
+	BrewsyncVersion string         `yaml:"brewsync_version,omitempty"`
 }
 
 type LastSyncInfo struct {
@@ -647,4 +647,3 @@ func filterIgnoredFromDiff(diff *brewfile.DiffResult, ignoredCategories, ignored
 		Common:    diff.Common, // Keep common as is
 	}
 }
-

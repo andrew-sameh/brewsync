@@ -48,22 +48,22 @@ type DoneMsg struct {
 
 // Model is the progress UI model
 type Model struct {
-	title            string
-	packages         brewfile.Packages
-	current          int
-	spinner          spinner.Model
-	progress         progress.Model
-	results          []InstallResult
-	installed        int
-	failed           int
-	done             bool
-	width            int
-	height           int
-	installFn        InstallFunc
-	installOutputFn  InstallWithOutputFunc
-	outputLines      []string          // Recent output lines
-	maxOutputLines   int              // Max lines to keep
-	currentPkg       *brewfile.Package // Current package being installed
+	title           string
+	packages        brewfile.Packages
+	current         int
+	spinner         spinner.Model
+	progress        progress.Model
+	results         []InstallResult
+	installed       int
+	failed          int
+	done            bool
+	width           int
+	height          int
+	installFn       InstallFunc
+	installOutputFn InstallWithOutputFunc
+	outputLines     []string          // Recent output lines
+	maxOutputLines  int               // Max lines to keep
+	currentPkg      *brewfile.Package // Current package being installed
 }
 
 // New creates a new progress model
