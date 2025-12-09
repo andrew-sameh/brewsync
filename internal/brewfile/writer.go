@@ -31,7 +31,7 @@ func (w *Writer) Format() string {
 	byType := w.packages.ByType()
 
 	// Write in specific order
-	typeOrder := []PackageType{TypeTap, TypeBrew, TypeCask, TypeMas, TypeVSCode, TypeCursor, TypeGo}
+	typeOrder := []PackageType{TypeTap, TypeBrew, TypeCask, TypeMas, TypeVSCode, TypeCursor, TypeAntigravity, TypeGo}
 
 	for _, t := range typeOrder {
 		pkgs, ok := byType[t]
@@ -45,7 +45,7 @@ func (w *Writer) Format() string {
 		})
 
 		// Add section comment for non-standard types
-		if t == TypeCursor || t == TypeGo {
+		if t == TypeCursor || t == TypeAntigravity || t == TypeGo {
 			sb.WriteString(fmt.Sprintf("\n# %s (brewsync extension)\n", t))
 		} else if sb.Len() > 0 {
 			sb.WriteString("\n")
