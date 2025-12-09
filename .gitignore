@@ -50,3 +50,9 @@ vendor/
 Thumbs.db
 .Spotlight-V100
 .Trashes
+
+# VHS demo outputs (keep only final GIFs in .github/demo/)
+*.gif
+!.github/demo/*.gif
+*.mp4
+frames/

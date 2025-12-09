@@ -1,7 +1,7 @@
 # BrewSync Makefile
 # Provides common commands for building, testing, and development
 
-.PHONY: help build install install-completion test test-coverage test-verbose clean run fmt lint vet dev doctor release
+.PHONY: help build install install-completion test test-coverage test-verbose clean run fmt lint vet dev doctor release bump tag demo demo-quick demo-tui
 
 # Variables
 BINARY_NAME=brewsync
@@ -206,15 +206,41 @@ test-cleanup: ## Cleanup test environment
 
 ##@ Git & Release
 
-tag: ## Create a new git tag (usage: make tag VERSION=v1.0.0)
-	@if [ -z "$(VERSION)" ]; then \
-		echo "$(COLOR_YELLOW)Usage: make tag VERSION=v1.0.0$(COLOR_RESET)"; \
+tag: ## Create a new git tag (usage: make tag V=v1.0.0)
+	@if [ -z "$(V)" ]; then \
+		echo "$(COLOR_YELLOW)Usage: make tag V=v1.0.0$(COLOR_RESET)"; \
 		exit 1; \
 	fi
-	@echo "$(COLOR_BLUE)Creating tag $(VERSION)...$(COLOR_RESET)"
-	@git tag -a $(VERSION) -m "Release $(VERSION)"
-	@echo "$(COLOR_GREEN)✓ Tag created: $(VERSION)$(COLOR_RESET)"
-	@echo "$(COLOR_BLUE)Push tag with: git push origin $(VERSION)$(COLOR_RESET)"
+	@echo "$(COLOR_BLUE)Creating tag $(V)...$(COLOR_RESET)"
+	@git tag -a $(V) -m "Release $(V)"
+	@echo "$(COLOR_GREEN)✓ Tag created: $(V)$(COLOR_RESET)"
+	@echo "$(COLOR_BLUE)Push tag with: git push origin $(V)$(COLOR_RESET)"
+
+bump: ## Commit all changes, tag, and push (usage: make bump V=v1.0.0 M="commit message")
+	@if [ -z "$(V)" ]; then \
+		echo "$(COLOR_YELLOW)Usage: make bump V=v1.0.0 M=\"commit message\"$(COLOR_RESET)"; \
+		echo "$(COLOR_YELLOW)  V = version tag (required)$(COLOR_RESET)"; \
+		echo "$(COLOR_YELLOW)  M = commit message (optional, defaults to version)$(COLOR_RESET)"; \
+		exit 1; \
+	fi
+	@echo "$(COLOR_BLUE)Bumping to $(V)...$(COLOR_RESET)"
+	@echo ""
+	@echo "$(COLOR_BOLD)Changes to commit:$(COLOR_RESET)"
+	@git status -s
+	@echo ""
+	@git add -A
+	@if [ -z "$(M)" ]; then \
+		git commit -m "$(V)"; \
+	else \
+		git commit -m "$(V): $(M)"; \
+	fi
+	@git tag -a $(V) -m "Release $(V)"
+	@echo "$(COLOR_GREEN)✓ Committed and tagged $(V)$(COLOR_RESET)"
+	@echo ""
+	@echo "$(COLOR_BLUE)Pushing to origin...$(COLOR_RESET)"
+	@git push && git push origin $(V)
+	@echo ""
+	@echo "$(COLOR_GREEN)✓ Released $(V)$(COLOR_RESET)"
 
 status: ## Show git status and build info
 	@echo "$(COLOR_BOLD)Project Status$(COLOR_RESET)"
@@ -242,6 +268,37 @@ ci: fmt vet test ## Run CI checks (format, vet, test)
 
 pre-commit: fmt vet test-coverage ## Run pre-commit checks
 	@echo "$(COLOR_GREEN)✓ Pre-commit checks passed$(COLOR_RESET)"
+
+##@ Demo
+
+demo: ## Generate all demo GIFs with VHS
+	@echo "$(COLOR_BLUE)Generating demo GIFs...$(COLOR_RESET)"
+	@if command -v vhs >/dev/null 2>&1; then \
+		vhs .github/demo/demo-quick.tape; \
+		vhs .github/demo/demo-tui.tape; \
+		vhs .github/demo/demo-interactive.tape; \
+		echo "$(COLOR_GREEN)✓ Demo GIFs generated in .github/demo/$(COLOR_RESET)"; \
+	else \
+		echo "$(COLOR_YELLOW)⚠ VHS not installed. Install with: brew install vhs$(COLOR_RESET)"; \
+	fi
+
+demo-quick: ## Generate quick demo GIF
+	@echo "$(COLOR_BLUE)Generating quick demo...$(COLOR_RESET)"
+	@if command -v vhs >/dev/null 2>&1; then \
+		vhs .github/demo/demo-quick.tape; \
+		echo "$(COLOR_GREEN)✓ Quick demo generated$(COLOR_RESET)"; \
+	else \
+		echo "$(COLOR_YELLOW)⚠ VHS not installed. Install with: brew install vhs$(COLOR_RESET)"; \
+	fi
+
+demo-tui: ## Generate TUI demo GIF
+	@echo "$(COLOR_BLUE)Generating TUI demo...$(COLOR_RESET)"
+	@if command -v vhs >/dev/null 2>&1; then \
+		vhs .github/demo/demo-tui.tape; \
+		echo "$(COLOR_GREEN)✓ TUI demo generated$(COLOR_RESET)"; \
+	else \
+		echo "$(COLOR_YELLOW)⚠ VHS not installed. Install with: brew install vhs$(COLOR_RESET)"; \
+	fi
 
 ##@ Information
 

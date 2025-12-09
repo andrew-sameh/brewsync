@@ -1,35 +1,73 @@
-# BrewSync
+<div align="center">
 
-A CLI tool to sync Homebrew packages, casks, taps, VSCode/Cursor extensions, Go tools, and Mac App Store apps across multiple macOS machines.
+# 🍺 BrewSync
 
-## Overview
+### Sync Homebrew packages across macOS machines
 
-BrewSync solves the problem of keeping multiple macOS machines in sync. When you install something on one machine, you can easily replicate that on your other machines without manual tracking.
+[![Go Version](https://img.shields.io/badge/Go-1.25+-00ADD8?style=flat&logo=go)](https://go.dev)
+[![License](https://img.shields.io/badge/License-MIT-blue.svg?style=flat)](LICENSE)
+[![Made with Charm](https://img.shields.io/badge/Made%20with-Charm-F25D94.svg?style=flat)](https://charm.sh)
 
-**Key Design Principles:**
-- **Machine-centric**: Each machine maintains its own Brewfile as the source of truth
-- **Git-based**: Designed for dotfiles workflows, not cloud storage
-- **Non-destructive by default**: Import only adds packages, never removes
-- **Interactive**: Choose what to install with batch options
+**Machine-centric** · **Git-based** · **Interactive** · **Non-destructive**
 
-## Features
+![BrewSync Demo](.github/demo/demo-interactive.gif)
 
-- Sync packages across multiple macOS machines
-- Support for multiple package types:
-  - Homebrew taps, formulae, and casks
-  - VSCode extensions
-  - Cursor extensions
-  - Antigravity extensions
-  - Go tools
-  - Mac App Store apps
-- Package descriptions captured automatically from Homebrew
-- Profile system for curated package groups
-- Ignore lists (global and per-machine)
+</div>
+
+---
+
+## ✨ Overview
+
+BrewSync keeps your macOS machines in sync. Install something on one machine, easily replicate it on your others — no manual tracking required.
+
+### 🎯 Key Features
+
+<table>
+<tr>
+<td width="50%">
+
+**📦 Multi-Package Support**
+- Homebrew taps, formulae & casks
+- VSCode, Cursor & Antigravity extensions
+- Go tools
+- Mac App Store apps
+
+**🎨 Interactive TUI**
+- Beautiful Catppuccin Mocha theme
+- Navigate with number keys (1-9)
+- Live package selection
+- Real-time progress tracking
+
+</td>
+<td width="50%">
+
+**⚙️ Smart Management**
+- Auto-captured package descriptions
+- Profile system for package groups
+- Global & per-machine ignore lists
 - Diff view between machines
 - Operation history logging
-- Doctor command for setup validation
 
-## Installation
+**🔒 Safe by Default**
+- Import only adds, never removes
+- Sync shows preview before applying
+- Machine-specific package support
+- Dry-run mode for all operations
+
+</td>
+</tr>
+</table>
+
+### 🏗️ Design Principles
+
+- **Machine-centric**: Each machine maintains its own Brewfile as the source of truth
+- **Git-based**: Designed for dotfiles workflows, not cloud storage
+- **Non-destructive by default**: Import mode only adds packages, never removes
+- **Interactive**: User picks what to install, with batch options available
+
+---
+
+## 📦 Installation
 
 ```bash
 # Using Make (recommended)
@@ -43,47 +81,84 @@ go install ./cmd/brewsync
 
 > 💡 **Tip**: Run `make help` to see all available commands. See [MAKEFILE_GUIDE.md](MAKEFILE_GUIDE.md) for details.
 
-## Quick Start
+---
 
-### 1. Initialize Configuration
+## 🚀 Quick Start
+
+<table>
+<tr>
+<td width="33%">
+
+### 1️⃣ Initialize
 
 ```bash
 brewsync config init
 ```
 
-This creates `~/.config/brewsync/config.yaml` with your machine settings based on hostname.
+Creates `~/.config/brewsync/config.yaml` with machine settings based on hostname.
 
-### 2. Dump Current Packages
+</td>
+<td width="33%">
+
+### 2️⃣ Capture State
 
 ```bash
 brewsync dump
 ```
 
-Creates/updates your machine's Brewfile with all installed packages. By default, package descriptions are automatically captured from Homebrew, making your Brewfile self-documenting.
+Updates your Brewfile with all installed packages, including descriptions.
 
-### 3. Check Status
+</td>
+<td width="33%">
+
+### 3️⃣ Check Status
 
 ```bash
 brewsync status
 ```
 
-Shows current machine info, package counts, and pending changes.
+Shows machine info, package counts, and pending changes.
 
-## Usage Flow
+</td>
+</tr>
+</table>
 
-### Setting Up Multiple Machines
+---
 
+## 💡 Usage Flow
+
+### 🔄 Setting Up Multiple Machines
+
+<table>
+<tr>
+<td width="50%">
+
+**Machine A (main workstation)**
+
+```bash
+1. brewsync config init
+2. brewsync dump
+3. git commit & push
 ```
-Machine A (main workstation)          Machine B (laptop)
-─────────────────────────────         ─────────────────────────
-1. brewsync config init               1. brewsync config init
-2. brewsync dump                      2. brewsync dump
-3. git commit & push                  3. git pull
-                                      4. brewsync diff --from machineA
-                                      5. brewsync import --from machineA
+
+</td>
+<td width="50%">
+
+**Machine B (laptop)**
+
+```bash
+1. brewsync config init
+2. brewsync dump
+3. git pull
+4. brewsync diff --from machineA
+5. brewsync import --from machineA
 ```
 
-### Daily Workflow
+</td>
+</tr>
+</table>
+
+### 📅 Daily Workflow
 
 ```bash
 # On your main machine - install new tools
@@ -100,23 +175,11 @@ brewsync status           # See what's new
 brewsync import           # Install missing packages
 ```
 
-### Using Profiles
+---
 
-```bash
-# Create a profile for core tools
-brewsync profile create core --description "Essential tools"
-brewsync profile edit core
+## 📚 Commands Reference
 
-# Install from profile on any machine
-brewsync profile install core
-
-# Install multiple profiles
-brewsync profile install core,dev-go,k8s
-```
-
-## Commands Reference
-
-### Core Commands
+### 🎯 Core Commands
 
 | Command | Description |
 |---------|-------------|
@@ -126,7 +189,7 @@ brewsync profile install core,dev-go,k8s
 | `import` | Install missing packages from another machine (interactive TUI) |
 | `sync` | Make current machine match source exactly (preview + apply) |
 
-### Status & Diagnostics
+### 🩺 Status & Diagnostics
 
 | Command | Description |
 |---------|-------------|
@@ -134,7 +197,7 @@ brewsync profile install core,dev-go,k8s
 | `doctor` | Validate setup and diagnose issues |
 | `history` | View operation history |
 
-### Configuration
+### ⚙️ Configuration
 
 | Command | Description |
 |---------|-------------|
@@ -144,7 +207,7 @@ brewsync profile install core,dev-go,k8s
 | `config init` | Initialize configuration |
 | `config add-machine` | Add a new machine |
 
-### Ignore Management
+### 🚫 Ignore Management
 
 | Command | Description |
 |---------|-------------|
@@ -153,7 +216,7 @@ brewsync profile install core,dev-go,k8s
 | `ignore remove` | Remove from ignore list |
 | `ignore clear` | Clear all ignored packages |
 
-### Profile Management
+### 📋 Profile Management
 
 | Command | Description |
 |---------|-------------|
@@ -164,9 +227,23 @@ brewsync profile install core,dev-go,k8s
 | `profile edit` | Edit profile in $EDITOR |
 | `profile delete` | Delete a profile |
 
-### Global Flags
+**Using Profiles:**
 
+```bash
+# Create a profile for core tools
+brewsync profile create core --description "Essential tools"
+brewsync profile edit core
+
+# Install from profile on any machine
+brewsync profile install core
+
+# Install multiple profiles at once
+brewsync profile install core,dev-go,k8s
 ```
+
+### 🎛️ Global Flags
+
+```bash
 --config string   Config file (default ~/.config/brewsync/config.yaml)
 --dry-run         Preview without executing
 --verbose, -v     Detailed output
@@ -175,7 +252,9 @@ brewsync profile install core,dev-go,k8s
 --yes, -y         Skip confirmations
 ```
 
-## Command Examples
+---
+
+## 📖 Command Examples
 
 ### dump
 
@@ -490,7 +569,9 @@ This checks:
 - Homebrew
 - Optional: VSCode (`code` CLI), Cursor (`cursor` CLI), Antigravity (`agy` CLI), mas-cli, Go
 
-## Development
+---
+
+## 🔧 Development
 
 ```bash
 # Quick development cycle
@@ -511,6 +592,11 @@ make build              # Build to ./bin/brewsync
 make install            # Install to $GOPATH/bin
 make release            # Optimized production build
 
+# Demo generation
+make demo               # Generate all demo GIFs
+make demo-quick         # Generate quick demo
+make demo-tui           # Generate TUI demo
+
 # Manual testing
 make test-setup         # Setup test environment
 # ... follow MANUAL_TEST_GUIDE.md
@@ -522,7 +608,9 @@ make help               # See all available commands
 
 See [MAKEFILE_GUIDE.md](MAKEFILE_GUIDE.md) for complete documentation.
 
-## Pending Items / Roadmap
+---
+
+## 🗺️ Roadmap
 
 The following TUI features are planned or need fixes:
 
@@ -536,6 +624,22 @@ The following TUI features are planned or need fixes:
 | 6 | Fix diff lists height bug | Column heights not calculated correctly in some cases |
 | 7 | Enhance Doctor screen | Add recommended fixes for warnings + descriptions for each check |
 
-## License
+---
+
+## 📄 License
 
 MIT
+
+---
+
+<div align="center">
+
+**Built with [Charm](https://charm.sh)** 💖
+
+[![Go](https://img.shields.io/badge/Go-00ADD8?style=flat&logo=go&logoColor=white)](https://go.dev)
+[![Bubble Tea](https://img.shields.io/badge/Bubble%20Tea-F25D94?style=flat)](https://github.com/charmbracelet/bubbletea)
+[![Lipgloss](https://img.shields.io/badge/Lipgloss-7D56F4?style=flat)](https://github.com/charmbracelet/lipgloss)
+
+[Report Bug](https://github.com/andrew-sameh/brewsync/issues) · [Request Feature](https://github.com/andrew-sameh/brewsync/issues) · [Documentation](CLAUDE.md)
+
+</div>
