@@ -4,8 +4,11 @@ import (
 	"github.com/charmbracelet/bubbles/help"
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/andrew-sameh/brewsync/internal/brewfile"
 	"github.com/andrew-sameh/brewsync/internal/config"
 	"github.com/andrew-sameh/brewsync/internal/debug"
+	"github.com/andrew-sameh/brewsync/internal/history"
+	"github.com/andrew-sameh/brewsync/internal/installer"
 	"github.com/andrew-sameh/brewsync/internal/tui/app/components"
 	"github.com/andrew-sameh/brewsync/internal/tui/app/screens"
 )
@@ -172,16 +175,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		}
 
-		// Esc returns to dashboard (except when already on dashboard)
+		// Esc - route to screen first, only go to dashboard if screen doesn't handle it
+		// Screens like Config, Ignore need esc to exit edit mode
 		if msg.String() == "esc" {
-			if m.screen != ScreenDashboard {
-				return m.navigateToScreen(ScreenDashboard)
+			if m.screen == ScreenDashboard {
+				return m, nil
 			}
-			return m, nil
+			// Let the screen handle esc first - if it wants to navigate to dashboard,
+			// it will return a NavigateMsg
+			return m.routeToScreen(msg)
 		}
 
-		// 'h' toggles showing ignored items
-		if msg.String() == "h" {
+		// 'H' toggles showing ignored items
+		if msg.String() == "H" {
 			m.showIgnored = !m.showIgnored
 			m.header.SetShowIgnored(m.showIgnored)
 			// Broadcast to current screen
@@ -218,6 +224,37 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case screens.StatusMsg:
 		m.statusMessage = msg.Message
 		m.statusType = msg.Type
+
+	case screens.PackageActionMsg:
+		// Start background package action
+		return m.handlePackageAction(msg)
+
+	case screens.PackageActionStartMsg:
+		// Update footer to show task running
+		action := "Installing"
+		if msg.Action == "uninstall" {
+			action = "Uninstalling"
+		}
+		m.footer.SetTaskRunning(true, action, msg.PkgType+":"+msg.PkgName)
+		// Propagate to active screen
+		return m.routeToScreen(msg)
+
+	case screens.PackageActionDoneMsg:
+		// Clear task indicator
+		m.footer.ClearTask()
+		// Log to history
+		machine := ""
+		if m.config != nil {
+			machine = m.config.CurrentMachine
+		}
+		pkgID := msg.PkgType + ":" + msg.PkgName
+		if msg.Action == "install" {
+			history.LogInstall(machine, pkgID, msg.Success)
+		} else {
+			history.LogUninstall(machine, pkgID, msg.Success)
+		}
+		// Propagate to active screen
+		return m.routeToScreen(msg)
 	}
 
 	// Route to active screen
@@ -545,6 +582,43 @@ func (m Model) handleNavigation(msg screens.NavigateMsg) (tea.Model, tea.Cmd) {
 // goBack returns to the previous screen (or dashboard)
 func (m Model) goBack() (tea.Model, tea.Cmd) {
 	return m.navigateToScreen(ScreenDashboard)
+}
+
+// handlePackageAction starts a background package install/uninstall
+func (m Model) handlePackageAction(msg screens.PackageActionMsg) (tea.Model, tea.Cmd) {
+	// Send start message and execute in background
+	return m, tea.Batch(
+		func() tea.Msg {
+			return screens.PackageActionStartMsg{
+				PkgType: msg.PkgType,
+				PkgName: msg.PkgName,
+				Action:  msg.Action,
+			}
+		},
+		func() tea.Msg {
+			// Execute the action
+			mgr := installer.NewManager()
+			pkg := brewfile.Package{
+				Type: brewfile.PackageType(msg.PkgType),
+				Name: msg.PkgName,
+			}
+
+			var err error
+			if msg.Action == "install" {
+				err = mgr.Install(pkg)
+			} else {
+				err = mgr.Uninstall(pkg)
+			}
+
+			return screens.PackageActionDoneMsg{
+				PkgType: msg.PkgType,
+				PkgName: msg.PkgName,
+				Action:  msg.Action,
+				Success: err == nil,
+				Error:   err,
+			}
+		},
+	)
 }
 
 // propagateResize sends resize message to active screen

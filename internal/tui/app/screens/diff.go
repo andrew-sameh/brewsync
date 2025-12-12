@@ -48,6 +48,14 @@ type DiffModel struct {
 	loading      bool
 	err          error
 	showIgnored  bool
+
+	// Confirmation dialog
+	showConfirm   bool
+	confirmAction string // "install" or "uninstall"
+	confirmPkg    brewfile.Package
+
+	// Task state
+	taskRunning bool
 }
 
 // NewDiffModel creates a new diff model
@@ -132,7 +140,21 @@ func (m *DiffModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.buildItems() // Rebuild to update visibility
 		return m, nil
 
+	case PackageActionStartMsg:
+		m.taskRunning = true
+		return m, nil
+
+	case PackageActionDoneMsg:
+		m.taskRunning = false
+		// Reload diff after action
+		return m, m.Init()
+
 	case tea.KeyMsg:
+		// Handle confirmation dialog
+		if m.showConfirm {
+			return m.handleConfirmInput(msg)
+		}
+
 		switch {
 		case key.Matches(msg, key.NewBinding(key.WithKeys("up", "k"))):
 			m.moveUp()
@@ -146,12 +168,73 @@ func (m *DiffModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.jumpToTop()
 		case key.Matches(msg, key.NewBinding(key.WithKeys("G"))):
 			m.jumpToBottom()
+		case key.Matches(msg, key.NewBinding(key.WithKeys("i"))):
+			// Install package (only from additions column)
+			if !m.taskRunning && m.column == DiffColumnAdditions {
+				pkg := m.getCurrentPackage()
+				if pkg != nil {
+					m.confirmPkg = *pkg
+					m.confirmAction = "install"
+					m.showConfirm = true
+				}
+			}
+		case key.Matches(msg, key.NewBinding(key.WithKeys("X"))):
+			// Uninstall package (only from removals column - packages that exist locally)
+			if !m.taskRunning && m.column == DiffColumnRemovals {
+				pkg := m.getCurrentPackage()
+				if pkg != nil {
+					m.confirmPkg = *pkg
+					m.confirmAction = "uninstall"
+					m.showConfirm = true
+				}
+			}
 		case key.Matches(msg, key.NewBinding(key.WithKeys("esc"))):
 			return m, func() tea.Msg { return Navigate("dashboard") }
 		}
 	}
 
 	return m, nil
+}
+
+// handleConfirmInput handles input in the confirmation dialog
+func (m *DiffModel) handleConfirmInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "y", "Y":
+		m.showConfirm = false
+		return m, func() tea.Msg {
+			return PackageActionMsg{
+				PkgType: string(m.confirmPkg.Type),
+				PkgName: m.confirmPkg.Name,
+				Action:  m.confirmAction,
+			}
+		}
+	case "n", "N", "esc":
+		m.showConfirm = false
+	}
+	return m, nil
+}
+
+// getCurrentPackage returns the package at the current cursor position in the active column
+func (m *DiffModel) getCurrentPackage() *brewfile.Package {
+	var items []diffItem
+	var cursor int
+
+	if m.column == DiffColumnAdditions {
+		items = m.addItems
+		cursor = m.addCursor
+	} else {
+		items = m.remItems
+		cursor = m.remCursor
+	}
+
+	if cursor < 0 || cursor >= len(items) {
+		return nil
+	}
+	item := items[cursor]
+	if item.isHeader || item.isIgnored {
+		return nil
+	}
+	return &item.pkg
 }
 
 // buildItems creates flattened lists with category headers
@@ -322,6 +405,10 @@ func (m *DiffModel) adjustRemOffset() {
 // getColumnHeight returns the visible height for each column
 func (m *DiffModel) getColumnHeight() int {
 	h := m.height - 4 // Just title and scroll indicator
+	// Reserve space for confirmation dialog if showing
+	if m.showConfirm {
+		h -= 5
+	}
 	if h < 1 {
 		h = 1
 	}
@@ -430,7 +517,39 @@ func (m *DiffModel) ViewContent(width, height int) string {
 		b.WriteString("\n")
 	}
 
+	// Confirmation dialog overlay
+	if m.showConfirm {
+		b.WriteString("\n")
+		b.WriteString(m.renderConfirmDialog())
+	}
+
 	return b.String()
+}
+
+// renderConfirmDialog renders the confirmation dialog
+func (m *DiffModel) renderConfirmDialog() string {
+	actionLabel := "Uninstall"
+	actionColor := styles.CatRed
+	if m.confirmAction == "install" {
+		actionLabel = "Install"
+		actionColor = styles.CatGreen
+	}
+
+	// Build dialog content
+	actionStyle := lipgloss.NewStyle().Foreground(actionColor).Bold(true)
+	pkgStyle := lipgloss.NewStyle().Foreground(styles.CatMauve).Bold(true)
+	promptStyle := lipgloss.NewStyle().Foreground(styles.CatYellow)
+
+	line1 := actionStyle.Render(actionLabel) + " " + pkgStyle.Render(fmt.Sprintf("%s:%s", m.confirmPkg.Type, m.confirmPkg.Name)) + "?"
+	line2 := promptStyle.Render("Press ") + lipgloss.NewStyle().Bold(true).Render("y") + promptStyle.Render(" to confirm, ") + lipgloss.NewStyle().Bold(true).Render("n") + promptStyle.Render(" to cancel")
+
+	// Create bordered dialog box
+	dialogStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(actionColor).
+		Padding(0, 2)
+
+	return dialogStyle.Render(line1 + "\n" + line2)
 }
 
 // renderColumn renders a single column with categorized packages

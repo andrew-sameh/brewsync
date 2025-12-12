@@ -291,7 +291,7 @@ brewsync import --include-machine-specific  # Include machine-specific packages
 The interactive TUI lets you:
 - Toggle packages with `space`
 - Select all/none with `a`/`n`
-- Filter by category with number keys `1-7`
+- Filter by category with number keys `1-8`
 - Search with `/`
 - Mark as ignored with `i`
 - Confirm with `enter`

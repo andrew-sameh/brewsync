@@ -32,6 +32,14 @@ type ListModel struct {
 	offset   int // For scrolling
 	loading  bool
 	err      error
+
+	// Confirmation dialog
+	showConfirm   bool
+	confirmAction string // "uninstall"
+	confirmPkg    brewfile.Package
+
+	// Task state
+	taskRunning bool
 }
 
 // NewListModel creates a new list model
@@ -81,7 +89,21 @@ func (m *ListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.buildItems()
 		return m, nil
 
+	case PackageActionStartMsg:
+		m.taskRunning = true
+		return m, nil
+
+	case PackageActionDoneMsg:
+		m.taskRunning = false
+		// Reload list after action
+		return m, m.Init()
+
 	case tea.KeyMsg:
+		// Handle confirmation dialog
+		if m.showConfirm {
+			return m.handleConfirmInput(msg)
+		}
+
 		switch {
 		case key.Matches(msg, key.NewBinding(key.WithKeys("up", "k"))):
 			m.moveUp()
@@ -97,12 +119,53 @@ func (m *ListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.cursor = len(m.items) - 1
 				m.adjustOffset()
 			}
-		case key.Matches(msg, key.NewBinding(key.WithKeys("esc", "h"))):
+		case key.Matches(msg, key.NewBinding(key.WithKeys("X"))):
+			// Uninstall current package
+			if !m.taskRunning {
+				pkg := m.getCurrentPackage()
+				if pkg != nil {
+					m.confirmPkg = *pkg
+					m.confirmAction = "uninstall"
+					m.showConfirm = true
+				}
+			}
+		case key.Matches(msg, key.NewBinding(key.WithKeys("esc"))):
 			return m, func() tea.Msg { return Navigate("dashboard") }
 		}
 	}
 
 	return m, nil
+}
+
+// handleConfirmInput handles input in the confirmation dialog
+func (m *ListModel) handleConfirmInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "y", "Y":
+		m.showConfirm = false
+		// Send package action message
+		return m, func() tea.Msg {
+			return PackageActionMsg{
+				PkgType: string(m.confirmPkg.Type),
+				PkgName: m.confirmPkg.Name,
+				Action:  m.confirmAction,
+			}
+		}
+	case "n", "N", "esc":
+		m.showConfirm = false
+	}
+	return m, nil
+}
+
+// getCurrentPackage returns the package at the current cursor position
+func (m *ListModel) getCurrentPackage() *brewfile.Package {
+	if m.cursor < 0 || m.cursor >= len(m.items) {
+		return nil
+	}
+	item := m.items[m.cursor]
+	if item.isHeader {
+		return nil
+	}
+	return &item.pkg
 }
 
 // buildItems creates a flattened list of items for navigation
@@ -202,6 +265,10 @@ func (m *ListModel) ViewContent(width, height int) string {
 	}
 
 	visibleHeight := height - 2
+	// Reserve space for confirmation dialog if showing (4 lines: 2 blank + bordered dialog ~2 lines)
+	if m.showConfirm {
+		visibleHeight -= 5
+	}
 	if visibleHeight < 1 {
 		visibleHeight = 1
 	}
@@ -259,7 +326,39 @@ func (m *ListModel) ViewContent(width, height int) string {
 		b.WriteString(styles.DimmedStyle.Render(scrollInfo))
 	}
 
+	// Confirmation dialog overlay
+	if m.showConfirm {
+		b.WriteString("\n\n")
+		b.WriteString(m.renderConfirmDialog())
+	}
+
 	return b.String()
+}
+
+// renderConfirmDialog renders the confirmation dialog
+func (m *ListModel) renderConfirmDialog() string {
+	actionLabel := "Uninstall"
+	actionColor := styles.CatRed
+	if m.confirmAction == "install" {
+		actionLabel = "Install"
+		actionColor = styles.CatGreen
+	}
+
+	// Build dialog content
+	actionStyle := lipgloss.NewStyle().Foreground(actionColor).Bold(true)
+	pkgStyle := lipgloss.NewStyle().Foreground(styles.CatMauve).Bold(true)
+	promptStyle := lipgloss.NewStyle().Foreground(styles.CatYellow)
+
+	line1 := actionStyle.Render(actionLabel) + " " + pkgStyle.Render(fmt.Sprintf("%s:%s", m.confirmPkg.Type, m.confirmPkg.Name)) + "?"
+	line2 := promptStyle.Render("Press ") + lipgloss.NewStyle().Bold(true).Render("y") + promptStyle.Render(" to confirm, ") + lipgloss.NewStyle().Bold(true).Render("n") + promptStyle.Render(" to cancel")
+
+	// Create bordered dialog box
+	dialogStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(actionColor).
+		Padding(0, 2)
+
+	return dialogStyle.Render(line1 + "\n" + line2)
 }
 
 func getTypeIcon(t brewfile.PackageType) string {

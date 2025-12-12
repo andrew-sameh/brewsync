@@ -15,11 +15,13 @@ import (
 type Operation string
 
 const (
-	OpDump    Operation = "dump"
-	OpImport  Operation = "import"
-	OpSync    Operation = "sync"
-	OpIgnore  Operation = "ignore"
-	OpProfile Operation = "profile"
+	OpDump      Operation = "dump"
+	OpImport    Operation = "import"
+	OpSync      Operation = "sync"
+	OpIgnore    Operation = "ignore"
+	OpProfile   Operation = "profile"
+	OpInstall   Operation = "install"
+	OpUninstall Operation = "uninstall"
 )
 
 // Entry represents a single history log entry
@@ -92,6 +94,24 @@ func LogSync(machine, source string, added, removed int) error {
 	details := fmt.Sprintf("←%s;+%d,-%d", source, added, removed)
 	summary := "applied"
 	return Log(OpSync, machine, details, summary)
+}
+
+// LogInstall logs a single package install operation
+func LogInstall(machine, pkgID string, success bool) error {
+	summary := "installed"
+	if !success {
+		summary = "failed"
+	}
+	return Log(OpInstall, machine, pkgID, summary)
+}
+
+// LogUninstall logs a single package uninstall operation
+func LogUninstall(machine, pkgID string, success bool) error {
+	summary := "uninstalled"
+	if !success {
+		summary = "failed"
+	}
+	return Log(OpUninstall, machine, pkgID, summary)
 }
 
 // Read returns the most recent history entries

@@ -132,20 +132,33 @@ func runImport(cmd *cobra.Command, args []string) error {
 		missing = filterByCategories(missing, categories, false)
 	}
 
-	// Filter ignored packages
+	// Build ignored packages map (for marking in selection UI)
 	ignored := cfg.GetIgnoredPackages(currentMachine)
 	ignoredMap := make(map[string]bool)
 	for _, pkg := range ignored {
 		ignoredMap[pkg] = true
 	}
 
-	var filtered brewfile.Packages
-	for _, pkg := range missing {
-		if !ignoredMap[pkg.ID()] {
-			filtered = append(filtered, pkg)
+	// Also check for ignored categories
+	for i := range missing {
+		pkg := missing[i]
+		if cfg.IsCategoryIgnored(currentMachine, string(pkg.Type)) {
+			ignoredMap[pkg.ID()] = true
 		}
 	}
-	missing = filtered
+
+	// For --yes mode, filter out ignored packages
+	// For interactive mode, keep all packages and let selection UI handle visibility
+	missingForAutoMode := missing
+	if assumeYes {
+		var filtered brewfile.Packages
+		for _, pkg := range missing {
+			if !ignoredMap[pkg.ID()] {
+				filtered = append(filtered, pkg)
+			}
+		}
+		missingForAutoMode = filtered
+	}
 
 	// Filter machine-specific packages (unless opted in)
 	if !importIncludeMachineSpecific {
@@ -172,20 +185,56 @@ func runImport(cmd *cobra.Command, args []string) error {
 			}
 		}
 		missing = nonSpecific
+
+		// Also filter missingForAutoMode
+		if assumeYes {
+			var nonSpecificAuto brewfile.Packages
+			for _, pkg := range missingForAutoMode {
+				isSpecific := false
+				for machine, pkgs := range machineSpecific {
+					if machine == currentMachine {
+						continue
+					}
+					for _, specific := range pkgs {
+						if pkg.ID() == specific {
+							isSpecific = true
+							break
+						}
+					}
+					if isSpecific {
+						break
+					}
+				}
+				if !isSpecific {
+					nonSpecificAuto = append(nonSpecificAuto, pkg)
+				}
+			}
+			missingForAutoMode = nonSpecificAuto
+		}
 	}
 
-	if len(missing) == 0 {
+	// Check if there are packages to import
+	// For interactive mode, check missing (includes ignored for toggle)
+	// For auto mode, check missingForAutoMode (excludes ignored)
+	packagesToCheck := missing
+	if assumeYes {
+		packagesToCheck = missingForAutoMode
+	}
+
+	if len(packagesToCheck) == 0 {
 		printInfo("No new packages to import (after filters)")
 		return nil
 	}
 
-	printInfo("Found %d packages to import", len(missing))
+	printInfo("Found %d packages to import", len(packagesToCheck))
 
-	// Dry run - just show what would be imported
+	// Dry run - just show what would be imported (excluding ignored)
 	if dryRun {
 		fmt.Println("\nWould import:")
 		for _, pkg := range missing {
-			fmt.Printf("  %s:%s\n", pkg.Type, pkg.Name)
+			if !ignoredMap[pkg.ID()] {
+				fmt.Printf("  %s:%s\n", pkg.Type, pkg.Name)
+			}
 		}
 		return nil
 	}
@@ -194,18 +243,20 @@ func runImport(cmd *cobra.Command, args []string) error {
 	var toInstall brewfile.Packages
 
 	if assumeYes {
-		// Install all without prompts
-		toInstall = missing
+		// Install all without prompts (already filtered)
+		toInstall = missingForAutoMode
 	} else {
-		// Interactive selection
+		// Interactive selection - pass ALL packages including ignored
 		title := fmt.Sprintf("Import from %s - Select packages to install", strings.Join(sources, ", "))
 		model := selection.New(title, missing)
 		model.SetIgnored(ignoredMap)
 
-		// Pre-select all by default
+		// Pre-select all non-ignored by default
 		preselected := make(map[string]bool)
 		for _, pkg := range missing {
-			preselected[pkg.ID()] = true
+			if !ignoredMap[pkg.ID()] {
+				preselected[pkg.ID()] = true
+			}
 		}
 		model.SetSelected(preselected)
 

@@ -16,14 +16,15 @@ import (
 type Category string
 
 const (
-	CategoryAll    Category = "all"
-	CategoryTap    Category = "tap"
-	CategoryBrew   Category = "brew"
-	CategoryCask   Category = "cask"
-	CategoryVSCode Category = "vscode"
-	CategoryCursor Category = "cursor"
-	CategoryGo     Category = "go"
-	CategoryMas    Category = "mas"
+	CategoryAll         Category = "all"
+	CategoryTap         Category = "tap"
+	CategoryBrew        Category = "brew"
+	CategoryCask        Category = "cask"
+	CategoryVSCode      Category = "vscode"
+	CategoryCursor      Category = "cursor"
+	CategoryAntigravity Category = "antigravity"
+	CategoryGo          Category = "go"
+	CategoryMas         Category = "mas"
 )
 
 // AllCategories returns all available categories in order
@@ -35,6 +36,7 @@ func AllCategories() []Category {
 		CategoryCask,
 		CategoryVSCode,
 		CategoryCursor,
+		CategoryAntigravity,
 		CategoryGo,
 		CategoryMas,
 	}
@@ -64,6 +66,7 @@ type Model struct {
 	keys              KeyMap
 	help              help.Model
 	showHelp          bool
+	showIgnored       bool // Whether to show ignored items in the list
 	width             int
 	height            int
 	cancelled         bool
@@ -210,6 +213,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, m.keys.IgnoreCategory):
 			m.toggleIgnoreCurrentCategory()
 
+		case key.Matches(msg, m.keys.ToggleShowIgnored):
+			m.showIgnored = !m.showIgnored
+			m.updateFiltered()
+			// Reset cursor if it's now out of bounds
+			if m.cursor >= len(m.filtered) {
+				m.cursor = len(m.filtered) - 1
+				if m.cursor < 0 {
+					m.cursor = 0
+				}
+			}
+
 		case key.Matches(msg, m.keys.Help):
 			m.showHelp = !m.showHelp
 
@@ -225,6 +239,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.setCategory(CategoryVSCode)
 		case key.Matches(msg, m.keys.TabCursor):
 			m.setCategory(CategoryCursor)
+		case key.Matches(msg, m.keys.TabAntigravity):
+			m.setCategory(CategoryAntigravity)
 		case key.Matches(msg, m.keys.TabGo):
 			m.setCategory(CategoryGo)
 		case key.Matches(msg, m.keys.TabMas):
@@ -281,13 +297,17 @@ func (m Model) Confirmed() bool {
 	return m.confirmed
 }
 
-// updateFiltered updates the filtered list based on category and search
+// updateFiltered updates the filtered list based on category, search, and showIgnored
 func (m *Model) updateFiltered() {
 	m.filtered = nil
 
-	// First filter by category
+	// First filter by category and ignored state
 	var categoryFiltered []int
 	for i, item := range m.items {
+		// Skip ignored items if not showing them
+		if item.Ignored && !m.showIgnored {
+			continue
+		}
 		if m.category == CategoryAll || Category(item.Package.Type) == m.category {
 			categoryFiltered = append(categoryFiltered, i)
 		}

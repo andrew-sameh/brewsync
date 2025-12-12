@@ -46,23 +46,78 @@ func (m Model) render() string {
 	return b.String()
 }
 
-// renderTabs renders the category tabs
+// renderTabs renders the category tabs with wrapping for small windows
 func (m Model) renderTabs() string {
 	counts := m.countByCategory()
-	var tabs []string
+	categories := AllCategories()
 
-	for _, cat := range AllCategories() {
+	// Calculate tab widths and wrap if needed
+	var rows []string
+	var currentRow []string
+	currentWidth := 0
+	maxWidth := m.width - 4 // Leave some margin
+	if maxWidth < 40 {
+		maxWidth = 40
+	}
+
+	for _, cat := range categories {
 		c := counts[cat]
 		label := fmt.Sprintf("%s (%d/%d)", cat, c.selected, c.total)
 
+		var tab string
 		if cat == m.category {
-			tabs = append(tabs, styles.ActiveTabStyle.Render(label))
+			tab = styles.ActiveTabStyle.Render(label)
 		} else {
-			tabs = append(tabs, styles.InactiveTabStyle.Render(label))
+			tab = styles.InactiveTabStyle.Render(label)
 		}
+
+		tabWidth := lipgloss.Width(tab)
+
+		// Check if we need to wrap to a new row
+		if currentWidth+tabWidth > maxWidth && len(currentRow) > 0 {
+			rows = append(rows, lipgloss.JoinHorizontal(lipgloss.Top, currentRow...))
+			currentRow = []string{}
+			currentWidth = 0
+		}
+
+		currentRow = append(currentRow, tab)
+		currentWidth += tabWidth
 	}
 
-	return lipgloss.JoinHorizontal(lipgloss.Top, tabs...)
+	// Add the last row
+	if len(currentRow) > 0 {
+		rows = append(rows, lipgloss.JoinHorizontal(lipgloss.Top, currentRow...))
+	}
+
+	return strings.Join(rows, "\n")
+}
+
+// countTabRows calculates how many rows the tabs will take
+func (m Model) countTabRows() int {
+	counts := m.countByCategory()
+	categories := AllCategories()
+
+	rows := 1
+	currentWidth := 0
+	maxWidth := m.width - 4
+	if maxWidth < 40 {
+		maxWidth = 40
+	}
+
+	for _, cat := range categories {
+		c := counts[cat]
+		label := fmt.Sprintf("%s (%d/%d)", cat, c.selected, c.total)
+		// Approximate tab width: label + padding (2 chars on each side)
+		tabWidth := len(label) + 4
+
+		if currentWidth+tabWidth > maxWidth && currentWidth > 0 {
+			rows++
+			currentWidth = 0
+		}
+		currentWidth += tabWidth
+	}
+
+	return rows
 }
 
 // renderList renders the package list
@@ -73,8 +128,10 @@ func (m Model) renderList() string {
 
 	var lines []string
 
-	// Calculate visible range
-	visibleHeight := m.height - 12 // Account for header, tabs, status, help
+	// Calculate visible range - account for wrapped tabs on narrow windows
+	tabRows := m.countTabRows()
+	overhead := 10 + tabRows // header, tabs (variable), status, help, padding
+	visibleHeight := m.height - overhead
 	if visibleHeight < 5 {
 		visibleHeight = 5
 	}
@@ -181,6 +238,13 @@ func (m Model) renderStatus() string {
 	status := fmt.Sprintf("Selected: %d | Ignored: %d | Total: %d",
 		selected, ignored, len(m.items))
 
+	// Add show/hide ignored indicator
+	if m.showIgnored {
+		status += " | " + styles.SelectedStyle.Render("Showing ignored")
+	} else if ignored > 0 {
+		status += " | " + styles.DimmedStyle.Render("Hiding ignored")
+	}
+
 	return styles.SubtitleStyle.Render(status)
 }
 
@@ -191,8 +255,9 @@ func (m Model) renderShortHelp() string {
 		"a:all",
 		"n:none",
 		"i:ignore",
+		"H:show/hide",
 		"/:search",
-		"1-7:tabs",
+		"1-8:tabs",
 		"enter:confirm",
 		"q:quit",
 		"?:help",

@@ -183,13 +183,14 @@ const (
 
 // CategoryColors maps package types to colors
 var CategoryColors = map[string]lipgloss.Color{
-	"tap":    lipgloss.Color("212"), // Blue
-	"brew":   lipgloss.Color("42"),  // Green
-	"cask":   lipgloss.Color("214"), // Yellow
-	"vscode": lipgloss.Color("99"),  // Purple
-	"cursor": lipgloss.Color("135"), // Light purple
-	"go":     lipgloss.Color("39"),  // Cyan
-	"mas":    lipgloss.Color("196"), // Red
+	"tap":         lipgloss.Color("212"), // Blue
+	"brew":        lipgloss.Color("42"),  // Green
+	"cask":        lipgloss.Color("214"), // Yellow
+	"vscode":      lipgloss.Color("99"),  // Purple
+	"cursor":      lipgloss.Color("135"), // Light purple
+	"antigravity": lipgloss.Color("205"), // Pink
+	"go":          lipgloss.Color("39"),  // Cyan
+	"mas":         lipgloss.Color("196"), // Red
 }
 
 // GetCategoryStyle returns a style for the given package type

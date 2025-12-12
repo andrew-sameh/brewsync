@@ -14,6 +14,10 @@ type FooterModel struct {
 	keybindings []KeyBinding
 	statusMsg   string
 	statusType  string // info, success, error, warning
+	// Task indicator
+	taskRunning bool
+	taskAction  string // "Installing", "Uninstalling"
+	taskPkg     string // Package name
 }
 
 // KeyBinding represents a single keybinding hint
@@ -52,6 +56,25 @@ func (m *FooterModel) ClearStatus() {
 	m.statusType = ""
 }
 
+// SetTaskRunning sets the task indicator
+func (m *FooterModel) SetTaskRunning(running bool, action, pkg string) {
+	m.taskRunning = running
+	m.taskAction = action
+	m.taskPkg = pkg
+}
+
+// ClearTask clears the task indicator
+func (m *FooterModel) ClearTask() {
+	m.taskRunning = false
+	m.taskAction = ""
+	m.taskPkg = ""
+}
+
+// IsTaskRunning returns whether a task is running
+func (m *FooterModel) IsTaskRunning() bool {
+	return m.taskRunning
+}
+
 // View renders the footer
 func (m FooterModel) View() string {
 	var parts []string
@@ -63,13 +86,39 @@ func (m FooterModel) View() string {
 
 	content := strings.Join(parts, styles.BorderStyle.Render("  │  "))
 
-	// Pad to width if needed
-	contentWidth := lipgloss.Width(content)
-	if contentWidth < m.width {
-		content = content + strings.Repeat(" ", m.width-contentWidth)
+	// Add task indicator on the right if running
+	if m.taskRunning {
+		taskIndicator := m.renderTaskIndicator()
+		indicatorWidth := lipgloss.Width(taskIndicator)
+		contentWidth := lipgloss.Width(content)
+		// Calculate space: total width minus content minus indicator minus some padding
+		availableSpace := m.width - contentWidth - indicatorWidth - 6
+
+		if availableSpace > 0 {
+			content = content + strings.Repeat(" ", availableSpace) + taskIndicator
+		} else {
+			// If not enough space, put task indicator after a separator
+			content = content + styles.BorderStyle.Render("  │  ") + taskIndicator
+		}
 	}
 
 	return content
+}
+
+// renderTaskIndicator renders the running task indicator
+func (m FooterModel) renderTaskIndicator() string {
+	spinnerChars := []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+	// Use a simple static spinner char for now (animation would need tick messages)
+	spinner := spinnerChars[0]
+
+	taskStyle := lipgloss.NewStyle().
+		Foreground(styles.CatYellow).
+		Bold(true)
+
+	pkgStyle := lipgloss.NewStyle().
+		Foreground(styles.CatMauve)
+
+	return taskStyle.Render(spinner+" "+m.taskAction) + " " + pkgStyle.Render(m.taskPkg)
 }
 
 // RenderFullFooter renders the complete footer with borders
@@ -123,7 +172,7 @@ func (m FooterModel) RenderFullFooter() string {
 func DefaultKeybindings() []KeyBinding {
 	return []KeyBinding{
 		{Key: "1-0/!", Desc: "Screens"},
-		{Key: "h", Desc: "Toggle Ignored"},
+		{Key: "H", Desc: "Toggle Ignored"},
 		{Key: "Esc", Desc: "Dashboard"},
 		{Key: "q", Desc: "Quit"},
 	}
@@ -133,7 +182,7 @@ func DefaultKeybindings() []KeyBinding {
 func DashboardKeybindings() []KeyBinding {
 	return []KeyBinding{
 		{Key: "1-0/!", Desc: "Screens"},
-		{Key: "h", Desc: "Toggle Ignored"},
+		{Key: "H", Desc: "Toggle Ignored"},
 		{Key: "q", Desc: "Quit"},
 	}
 }
@@ -152,9 +201,9 @@ func ContentKeybindings() []KeyBinding {
 func ListKeybindings() []KeyBinding {
 	return []KeyBinding{
 		{Key: "j/k", Desc: "Navigate"},
+		{Key: "X", Desc: "Uninstall"},
 		{Key: "g/G", Desc: "Top/Bottom"},
 		{Key: "Esc", Desc: "Dashboard"},
-		{Key: "q", Desc: "Quit"},
 	}
 }
 
@@ -182,8 +231,9 @@ func SyncKeybindings() []KeyBinding {
 func DiffKeybindings() []KeyBinding {
 	return []KeyBinding{
 		{Key: "j/k", Desc: "Navigate"},
-		{Key: "h/l", Desc: "Switch Column"},
-		{Key: "g/G", Desc: "Top/Bottom"},
+		{Key: "h/l", Desc: "Columns"},
+		{Key: "i", Desc: "Install"},
+		{Key: "X", Desc: "Uninstall"},
 		{Key: "Esc", Desc: "Dashboard"},
 	}
 }

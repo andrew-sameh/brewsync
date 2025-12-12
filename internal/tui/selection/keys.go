@@ -4,31 +4,33 @@ import "github.com/charmbracelet/bubbles/key"
 
 // KeyMap defines all keybindings for the selection UI
 type KeyMap struct {
-	Up             key.Binding
-	Down           key.Binding
-	Left           key.Binding
-	Right          key.Binding
-	Toggle         key.Binding
-	SelectAll      key.Binding
-	SelectNone     key.Binding
-	Confirm        key.Binding
-	Quit           key.Binding
-	Search         key.Binding
-	ClearSearch    key.Binding
-	Ignore         key.Binding
-	IgnoreCategory key.Binding
-	SaveProfile    key.Binding
-	TabTap         key.Binding
-	TabBrew        key.Binding
-	TabCask        key.Binding
-	TabVSCode      key.Binding
-	TabCursor      key.Binding
-	TabGo          key.Binding
-	TabMas         key.Binding
-	TabAll         key.Binding
-	Help           key.Binding
-	PageUp         key.Binding
-	PageDown       key.Binding
+	Up              key.Binding
+	Down            key.Binding
+	Left            key.Binding
+	Right           key.Binding
+	Toggle          key.Binding
+	SelectAll       key.Binding
+	SelectNone      key.Binding
+	Confirm         key.Binding
+	Quit            key.Binding
+	Search          key.Binding
+	ClearSearch     key.Binding
+	Ignore          key.Binding
+	IgnoreCategory  key.Binding
+	ToggleShowIgnored key.Binding
+	SaveProfile     key.Binding
+	TabTap          key.Binding
+	TabBrew         key.Binding
+	TabCask         key.Binding
+	TabVSCode       key.Binding
+	TabCursor       key.Binding
+	TabAntigravity  key.Binding
+	TabGo           key.Binding
+	TabMas          key.Binding
+	TabAll          key.Binding
+	Help            key.Binding
+	PageUp          key.Binding
+	PageDown        key.Binding
 }
 
 // DefaultKeyMap returns the default keybindings
@@ -86,6 +88,10 @@ func DefaultKeyMap() KeyMap {
 			key.WithKeys("I", "C"),
 			key.WithHelp("I/C", "ignore category"),
 		),
+		ToggleShowIgnored: key.NewBinding(
+			key.WithKeys("H"),
+			key.WithHelp("H", "toggle ignored"),
+		),
 		SaveProfile: key.NewBinding(
 			key.WithKeys("s"),
 			key.WithHelp("s", "save profile"),
@@ -110,13 +116,17 @@ func DefaultKeyMap() KeyMap {
 			key.WithKeys("5"),
 			key.WithHelp("5", "cursor"),
 		),
-		TabGo: key.NewBinding(
+		TabAntigravity: key.NewBinding(
 			key.WithKeys("6"),
-			key.WithHelp("6", "go"),
+			key.WithHelp("6", "antigravity"),
+		),
+		TabGo: key.NewBinding(
+			key.WithKeys("7"),
+			key.WithHelp("7", "go"),
 		),
 		TabMas: key.NewBinding(
-			key.WithKeys("7"),
-			key.WithHelp("7", "mas"),
+			key.WithKeys("8"),
+			key.WithHelp("8", "mas"),
 		),
 		TabAll: key.NewBinding(
 			key.WithKeys("0"),
@@ -146,9 +156,9 @@ func (k KeyMap) ShortHelp() []key.Binding {
 func (k KeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Up, k.Down, k.Left, k.Right, k.PageUp, k.PageDown},
-		{k.Toggle, k.SelectAll, k.SelectNone, k.Ignore, k.IgnoreCategory},
-		{k.TabAll, k.TabTap, k.TabBrew, k.TabCask},
-		{k.TabVSCode, k.TabCursor, k.TabGo, k.TabMas},
+		{k.Toggle, k.SelectAll, k.SelectNone, k.Ignore, k.IgnoreCategory, k.ToggleShowIgnored},
+		{k.TabAll, k.TabTap, k.TabBrew, k.TabCask, k.TabVSCode},
+		{k.TabCursor, k.TabAntigravity, k.TabGo, k.TabMas},
 		{k.Search, k.Confirm, k.Quit, k.Help},
 	}
 }

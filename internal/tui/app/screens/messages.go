@@ -57,3 +57,26 @@ func StatusWarning(message string) StatusMsg {
 type ShowIgnoredMsg struct {
 	Show bool
 }
+
+// PackageActionMsg is sent to request a package install/uninstall
+type PackageActionMsg struct {
+	PkgType string // tap, brew, cask, vscode, cursor, antigravity, go, mas
+	PkgName string
+	Action  string // install, uninstall
+}
+
+// PackageActionStartMsg is sent when a package action starts
+type PackageActionStartMsg struct {
+	PkgType string
+	PkgName string
+	Action  string
+}
+
+// PackageActionDoneMsg is sent when a package action completes
+type PackageActionDoneMsg struct {
+	PkgType string
+	PkgName string
+	Action  string
+	Success bool
+	Error   error
+}

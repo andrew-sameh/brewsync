@@ -86,6 +86,7 @@ func (m *DoctorModel) Init() tea.Cmd {
 			{"brew bundle", "brew", false},
 			{"VSCode CLI", "code", true},
 			{"Cursor CLI", "cursor", true},
+			{"Antigravity CLI", "antigravity", true},
 			{"Mac App Store CLI", "mas", true},
 			{"Go", "go", true},
 		}

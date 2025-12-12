@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/spf13/viper"
+	"gopkg.in/yaml.v3"
 )
 
 const (
@@ -179,4 +180,64 @@ func HistoryPath() (string, error) {
 		return "", err
 	}
 	return filepath.Join(dir, "history.log"), nil
+}
+
+// Save writes the current config to disk
+func Save(c *Config) error {
+	path, err := ConfigPath()
+	if err != nil {
+		return fmt.Errorf("failed to get config path: %w", err)
+	}
+
+	// Ensure directory exists
+	if err := EnsureDir(); err != nil {
+		return fmt.Errorf("failed to create config directory: %w", err)
+	}
+
+	// Create a saveable version (without internal ignoreFile field)
+	saveConfig := &saveableConfig{
+		Machines:           c.Machines,
+		CurrentMachine:     c.CurrentMachine,
+		DefaultSource:      c.DefaultSource,
+		DefaultCategories:  c.DefaultCategories,
+		AutoDump:           c.AutoDump,
+		Dump:               c.Dump,
+		MachineSpecific:    c.MachineSpecific,
+		ConflictResolution: c.ConflictResolution,
+		Output:             c.Output,
+		Hooks:              c.Hooks,
+	}
+
+	// Marshal to YAML
+	yamlData, err := yaml.Marshal(saveConfig)
+	if err != nil {
+		return fmt.Errorf("failed to marshal config: %w", err)
+	}
+
+	// Write to file
+	if err := os.WriteFile(path, yamlData, 0644); err != nil {
+		return fmt.Errorf("failed to write config file: %w", err)
+	}
+
+	// Update the cached config
+	cfg = c
+
+	// Reload viper to keep it in sync
+	viper.ReadInConfig()
+
+	return nil
+}
+
+// saveableConfig is the config structure for YAML serialization (without internal fields)
+type saveableConfig struct {
+	Machines           map[string]Machine    `yaml:"machines"`
+	CurrentMachine     string                `yaml:"current_machine"`
+	DefaultSource      string                `yaml:"default_source"`
+	DefaultCategories  []string              `yaml:"default_categories"`
+	AutoDump           AutoDumpConfig        `yaml:"auto_dump"`
+	Dump               DumpConfig            `yaml:"dump"`
+	MachineSpecific    MachineSpecificConfig `yaml:"machine_specific,omitempty"`
+	ConflictResolution ConflictResolution    `yaml:"conflict_resolution"`
+	Output             OutputConfig          `yaml:"output"`
+	Hooks              HooksConfig           `yaml:"hooks,omitempty"`
 }
