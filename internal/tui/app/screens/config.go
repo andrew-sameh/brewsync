@@ -853,10 +853,10 @@ func (m *ConfigModel) renderMachinesSection() string {
 		// Details (only for cursor item)
 		if isCursor {
 			detailStyle := styles.DimmedStyle
-			b.WriteString(detailStyle.Render(fmt.Sprintf("      Hostname: %s\n", machine.Hostname)))
-			b.WriteString(detailStyle.Render(fmt.Sprintf("      Brewfile: %s\n", machine.Brewfile)))
+			b.WriteString(detailStyle.Render(fmt.Sprintf("      Hostname: %s", machine.Hostname)) + "\n")
+			b.WriteString(detailStyle.Render(fmt.Sprintf("      Brewfile: %s", machine.Brewfile)) + "\n")
 			if machine.Description != "" {
-				b.WriteString(detailStyle.Render(fmt.Sprintf("      Description: %s\n", machine.Description)))
+				b.WriteString(detailStyle.Render(fmt.Sprintf("      Description: %s", machine.Description)) + "\n")
 			}
 		}
 	}

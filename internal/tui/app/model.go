@@ -160,14 +160,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.propagateResize(msg)
 
 	case tea.KeyMsg:
-		// Setup screen handles its own input
-		if m.screen == ScreenSetup {
-			return m.routeToScreen(msg)
-		}
-
-		// ctrl+c always quits
+		// ctrl+c always quits (even in setup)
 		if msg.String() == "ctrl+c" {
 			return m, tea.Quit
+		}
+
+		// Setup screen handles its own input (except ctrl+c above)
+		if m.screen == ScreenSetup {
+			return m.routeToScreen(msg)
 		}
 
 		// q always quits
@@ -211,12 +211,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if err == nil {
 			m.config = cfg
 			m.needsSetup = false
-			m.screen = ScreenDashboard
-			m.dashboard = screens.NewDashboardModel(m.config)
 			// Update header with machine name
 			if cfg.CurrentMachine != "" {
 				m.header.SetMachine(cfg.CurrentMachine)
 			}
+
+			// Go to dashboard
+			m.screen = ScreenDashboard
+			m.dashboard = screens.NewDashboardModel(m.config)
 			m.sidebar.SetActive(int(ScreenDashboard))
 			return m, m.dashboard.Init()
 		}

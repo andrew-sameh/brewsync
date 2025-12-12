@@ -689,7 +689,7 @@ func (m *IgnoreModel) renderTypeMenu() string {
 		b.WriteString(prefix + style.Render(t) + "\n")
 	}
 
-	b.WriteString(styles.DimmedStyle.Render("\nEnter:select • Esc:cancel"))
+	b.WriteString("\n" + styles.DimmedStyle.Render("Enter:select • Esc:cancel"))
 
 	return b.String()
 }
